@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sită clienți Mongo v12</title>
+<style>
+:root{
+  --bg:#f4f6f8;--card:#fff;--text:#172033;--muted:#667085;--border:#d9dee7;
+  --blue:#2563eb;--blue2:#1d4ed8;--green:#15803d;--red:#dc2626;--brown:#8b5a2b;
+  --orange:#ea580c;--purple:#7c3aed;--black:#0f172a;--shadow:0 14px 34px rgba(16,24,40,.08)
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
+header{background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;padding:24px 18px}
+header>div,main{max-width:1450px;margin:auto}
+h1{margin:0 0 7px;font-size:28px;letter-spacing:-.04em}
+.subtitle{margin:0;color:#dbeafe;line-height:1.45;max-width:1060px}
+main{padding:16px}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.tab{border:0;border-radius:999px;padding:9px 13px;font-weight:900;cursor:pointer;background:#e5e7eb;color:#111827}
+.tab.active{background:var(--blue);color:white}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:var(--shadow)}
+.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+@media(max-width:1050px){.c4,.c5,.c6,.c7,.c8{grid-column:span 12}}
+h2{margin:0 0 12px;font-size:18px}h3{margin:14px 0 8px;font-size:15px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 6px;font-weight:800}
+input,select,textarea{width:100%;border:1px solid var(--border);border-radius:12px;padding:11px 12px;font-size:14px;background:white;outline:none}
+textarea{min-height:145px;resize:vertical;line-height:1.5;font-family:Consolas,monospace}
+input:focus,select:focus,textarea:focus,.pastebox:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row>*{flex:1}.fixed{flex:0 0 auto}
+button{border:0;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:900;cursor:pointer;background:var(--blue);color:white;transition:.15s;white-space:nowrap}
+button:hover{background:var(--blue2);transform:translateY(-1px)}
+.green{background:var(--green)}.red{background:var(--red)}.brown{background:var(--brown)}.orange{background:var(--orange)}.purple{background:var(--purple)}.secondary{background:#475467}.ghost{background:#eef2ff;color:#1e3a8a}.small{padding:8px 10px;font-size:12px;border-radius:10px}
+.hidden{display:none!important}
+.stats{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:1000px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:#f8fafc;border:1px solid var(--border);border-radius:16px;padding:12px}.stat strong{display:block;font-size:23px}.stat span{color:var(--muted);font-size:12px;font-weight:800}
+.pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:900;background:#eef2ff;color:#1e3a8a;margin:2px}
+.pill.gray{background:#f2f4f7;color:#475467}.pill.green{background:#dcfce7;color:#166534}.pill.red{background:#fee2e2;color:#991b1b}.pill.brown{background:#f3e6d7;color:#6b3f18}.pill.black{background:#e2e8f0;color:#0f172a}.pill.purple{background:#ede9fe;color:#5b21b6}.pill.orange{background:#ffedd5;color:#9a3412}.pill.exhausted{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
+.notice{padding:12px;border-radius:14px;border:1px solid var(--border);background:#f8fafc;color:#344054;line-height:1.45;margin:10px 0}
+.notice.ok{background:#ecfdf3;border-color:#bbf7d0;color:#166534}.notice.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.notice.bad{background:#fef2f2;border-color:#fecaca;color:#991b1b}
+.scroll{overflow:auto;max-height:610px;border:1px solid var(--border);border-radius:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid var(--border);text-align:left;padding:10px 8px;vertical-align:top}th{position:sticky;top:0;background:#f8fafc;color:#475467;font-size:12px;text-transform:uppercase;letter-spacing:.03em;z-index:2}
+tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
+.s-active{color:#111827}.s-brown{color:var(--brown)}.s-red{color:var(--red)}.s-missing{color:var(--black)}
+.muted{color:var(--muted);font-size:13px;line-height:1.45}
+.mono{font-family:Consolas,monospace;background:#0b1020;color:#d1e7ff;border-radius:14px;padding:12px;white-space:pre-wrap;overflow:auto;max-height:260px}
+.pastebox{min-height:210px;max-height:260px;overflow:auto;border:2px dashed #cbd5e1;border-radius:16px;background:white;padding:14px;outline:none;line-height:1.6}
+.pastebox:empty:before{content:attr(data-placeholder);color:#98a2b3}
+.summary-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin:12px 0}
+@media(max-width:900px){.summary-grid{grid-template-columns:repeat(2,1fr)}}
+.summary-card{border-radius:16px;padding:14px;border:1px solid var(--border);box-shadow:0 8px 20px rgba(16,24,40,.06)}
+.summary-card strong{display:block;font-size:28px;line-height:1;margin-bottom:6px}.summary-card span{font-size:13px;font-weight:900}
+.summary-card.green{background:#ecfdf3;border-color:#bbf7d0;color:#166534}.summary-card.brown{background:#f3e6d7;border-color:#d8b894;color:#6b3f18}.summary-card.red{background:#fef2f2;border-color:#fecaca;color:#991b1b}.summary-card.blue{background:#eff6ff;border-color:#bfdbfe;color:#1e40af}.summary-card.gray{background:#f8fafc;border-color:#cbd5e1;color:#0f172a}.summary-card.purple{background:#ede9fe;border-color:#c4b5fd;color:#5b21b6}
+.big-status{font-size:18px;font-weight:900;padding:14px 16px;border-radius:16px;margin:12px 0}.big-status.ok{background:#ecfdf3;border:1px solid #86efac;color:#166534}.big-status.warn{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}.big-status.bad{background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}
+.details-box{margin-top:12px}.details-box summary{cursor:pointer;font-weight:900;color:#475467;padding:10px 0}
+#importInputBox,#importReportBox{max-height:690px;overflow:auto;padding-right:6px}
+.feedback{min-height:68px;font-family:Arial,sans-serif}.counter{display:inline-flex;align-items:center;gap:8px}.counter strong{font-size:18px}.transfer-batch{border:1px solid var(--border);border-radius:16px;padding:12px;margin-bottom:10px;background:#fff}.transfer-batch h3{margin:0 0 8px}.transfer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+</style>
+</head>
+<body>
+<header><div><h1>Sită clienți Mongo v12</h1><p class="subtitle">Baza se salvează în MongoDB. Poate fi folosită de pe mai multe calculatoare cu aceeași bază.</p></div></header>
+
+<main>
+<div class="tabs">
+  <button class="tab active" data-tab="dash">Dashboard</button>
+  <button class="tab" data-tab="agents">Agenți</button>
+  <button class="tab" data-tab="add">Adaugă numere</button>
+  <button class="tab" data-tab="return">Import MARO/ROȘU</button>
+  <button class="tab" data-tab="verify">Verificare</button>
+  <button class="tab" data-tab="transfer">Transfer MARO</button>
+  <button class="tab" data-tab="transferHistory">Istoric transferuri</button>
+  <button class="tab" data-tab="backup">Backup</button>
+  <button class="tab" onclick="location.href='/logout'" type="button">Logout</button>
+</div>
+
+<section id="tab-dash">
+  <div id="stats" class="stats"></div>
+  <div class="card c12">
+    <h2>Baza mare</h2>
+    <div class="row">
+      <input id="q" placeholder="Caută telefon, agent, status, notă..." oninput="render()">
+      <select id="fStatus" onchange="render()">
+        <option value="all">Toate statusurile</option>
+        <option value="active">ACTIV</option>
+        <option value="brown">MARO</option>
+        <option value="red">ROȘU</option>
+        <option value="missing">DISPĂRUT</option>
+        <option value="conflict">CONFLICT</option>
+      </select>
+      <select id="fEmp" onchange="render()"></select>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Telefon</th><th>Notă</th><th>Apariții la agenți</th><th>Verificare</th><th>Istoric</th></tr></thead>
+        <tbody id="clientsTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="tab-agents" class="hidden">
+  <div class="grid">
+    <div class="card c4">
+      <h2>Adaugă agent</h2>
+      <div class="row"><input id="empName" placeholder="Ex: Teo"><button onclick="addEmp()">Adaugă</button></div>
+    </div>
+    <div class="card c8">
+      <h2>Agenți</h2>
+      <div id="empList" class="notice"></div>
+      <div id="deletedEmpList" class="notice hidden"></div>
+    </div>
+    <div class="card c12">
+      <h2>Situație pe agenți</h2>
+      <div class="scroll" style="max-height:390px">
+        <table><thead><tr><th>Agent</th><th>Total apariții</th><th>ACTIV</th><th>MARO</th><th>ROȘU</th><th>DISPĂRUT</th></tr></thead><tbody id="empStats"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tab-add" class="hidden">
+  <div class="grid">
+    <div class="card c5">
+      <h2>Adaugă numere</h2>
+      <label>Agent</label><select id="assignEmp"></select>
+      <label>Telefon + notă opțională</label>
+      <textarea id="inputClients" placeholder="728319539-client nou&#10;447911123456 client UK&#10;004917612345678 client DE"></textarea>
+      <div class="row"><button onclick="addClients()">Salvează</button><button class="secondary" onclick="el('inputClients').value=''">Curăță</button></div>
+    </div>
+    <div class="card c7"><h2>Raport</h2><div id="entryReport" class="notice">Încă nu ai adăugat numere.</div></div>
+  </div>
+</section>
+
+<section id="tab-return" class="hidden">
+  <div class="grid">
+    <div class="card c5" id="importInputBox">
+      <h2>Import MARO/ROȘU din Sheet</h2>
+      <div class="notice warn">Lipește doar numerele scoase din Sheet. Culoarea celulei decide statusul. Dacă agentul nu e detectat clar, poți alege manual sursa.</div>
+      <label>Agent sursă</label>
+      <select id="manualImportAgent"></select>
+      <div class="muted">Lasă pe Auto dacă lista are majoritatea numerelor de la același agent.</div>
+      <label>Zonă paste colorată</label>
+      <div id="colorPasteBox" class="pastebox" contenteditable="true" data-placeholder="Click aici și dă Ctrl+V cu numerele MARO/ROȘU scoase din Google Sheets..."></div>
+      <div class="row"><button class="orange" onclick="processPasteBox()">Analizează</button><button class="secondary" onclick="clearPasteBox()">Curăță</button></div>
+      <h3>Text simplu</h3>
+      <textarea id="plainPaste" placeholder="728319539	rosu&#10;0728319539	maro"></textarea>
+      <button class="ghost" onclick="processPlainText()">Analizează text simplu</button>
+    </div>
+    <div class="card c7">
+      <h2>Raport import</h2>
+      <div id="importReportBox"><div id="retReport" class="notice">Încă nu ai importat nicio listă.</div></div>
+      <h3>Ce a citit</h3>
+      <div class="scroll" style="max-height:260px">
+        <table><thead><tr><th>Telefon</th><th>Status</th><th>Culoare</th><th>Agenți existenți</th></tr></thead><tbody id="parsedPreview"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tab-verify" class="hidden">
+  <div class="grid">
+    <div class="card c4">
+      <h2>Verificare</h2>
+      <p class="muted">Aici intră MARO, ROȘU, DISPĂRUT și conflictele între agenți.</p>
+      <div class="row">
+        <select id="verifyStatusFilter" onchange="renderVerification()">
+          <option value="all">Toate</option>
+          <option value="brown">MARO</option>
+          <option value="red">ROȘU</option>
+          <option value="missing">DISPĂRUT</option>
+          <option value="conflict">CONFLICT</option>
+        </select>
+        <select id="verifyEmpFilter" onchange="renderVerification()"></select>
+      </div>
+      <input id="verifySearch" placeholder="Caută..." oninput="renderVerification()">
+      <div id="verifyInfo" class="notice"></div>
+    </div>
+    <div class="card c8">
+      <h2>Lista de verificat</h2>
+      <div class="scroll">
+        <table><thead><tr><th>Telefon</th><th>Agent / status</th><th>Toate aparițiile</th><th>Nu răspunde</th><th>Feedback</th><th>Acțiuni</th></tr></thead><tbody id="verifyRows"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tab-transfer" class="hidden">
+  <div class="grid">
+    <div class="card c4">
+      <h2>Transfer global MARO</h2>
+      <label>Către agent</label><select id="trTo" onchange="renderTransfer()"></select>
+      <div class="notice warn">Afișez doar MARO eligibile pentru agentul ales. Cele deja existente la agentul destinație nu apar.</div>
+      <label>Selectare rapidă</label>
+      <div class="row"><button class="small ghost" onclick="selectFirstTransfer(10)">10</button><button class="small ghost" onclick="selectFirstTransfer(20)">20</button><button class="small ghost" onclick="selectFirstTransfer(50)">50</button></div>
+      <div class="row"><input id="transferCount" type="number" min="1" placeholder="Ex: 15"><button class="small secondary" onclick="selectFirstTransferFromInput()">Primele X</button></div>
+      <div class="row"><button class="small ghost" onclick="toggleAll(false)">Deselectează</button><button class="small green" onclick="toggleAll(true)">Selectează toate</button></div>
+      <button class="brown" onclick="transferBrown()">Transferă selectate</button>
+    </div>
+    <div class="card c8">
+      <h2>MARO eligibile</h2><div id="trInfo" class="notice"></div>
+      <div class="scroll">
+        <table><thead><tr><th><input type="checkbox" onchange="toggleAll(this.checked)"></th><th>Telefon</th><th>Notă</th><th>Vine de la</th><th>A mai fost la</th></tr></thead><tbody id="trRows"></tbody></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section id="tab-transferHistory" class="hidden">
+  <div class="grid">
+    <div class="card c4">
+      <h2>Istoric transferuri</h2>
+      <p class="muted">Aici vezi fiecare batch de MARO transferat: către cine a plecat, de la cine a venit și lista de numere. Poți copia oricând lista ca să o lipești în Sheet.</p>
+      <div id="transferHistoryStats" class="notice"></div>
+    </div>
+    <div class="card c8">
+      <h2>Batch-uri transferate</h2>
+      <div class="scroll">
+        <div id="transferHistoryRows" style="padding:10px"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="tab-backup" class="hidden">
+  <div class="grid">
+    <div class="card c6">
+      <h2>Backup</h2>
+      <div class="row"><button onclick="exportDb()">Descarcă JSON</button><button class="secondary" onclick="copyDb()">Copiază JSON</button></div>
+      <label class="file">Importă backup JSON<input type="file" accept=".json,application/json" onchange="importDbFile(event)"></label>
+      <h3>Undo</h3><div id="backupInfo" class="notice">Încă nu există backup automat.</div><button class="orange" onclick="restoreLastBackup()">Revino la ultimul backup</button>
+    </div>
+    <div class="card c6">
+      <h2>Reset</h2><button class="red" onclick="resetDb()">Resetează baza locală</button>
+      <h3>Preview JSON</h3><div id="preview" class="mono"></div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script>
+window.__INITIAL_DB__ = {{ initial_db|tojson }};
+window.__INITIAL_REV__ = {{ rev|tojson }};
+const KEY='mongo_state_v12';
+let db=loadDb();
+let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
+
+function el(id){return document.getElementById(id)}
+function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8)}
+function now(){return new Date().toLocaleString('ro-RO')}
+function clone(x){return JSON.parse(JSON.stringify(x))}
+function copyTextToClipboard(text,msg){
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>alert(msg||'Copiat în clipboard.')).catch(()=>fallbackCopy(text,msg));
+  }else fallbackCopy(text,msg);
+}
+function fallbackCopy(text,msg){
+  const ta=document.createElement('textarea');
+  ta.value=text;document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');alert(msg||'Copiat în clipboard.')}catch(e){alert('Nu am putut copia automat. Copiază manual din istoricul transferurilor.')}
+  ta.remove();
+}
+function loadDb(){
+  try{
+    return normalizeDb(window.__INITIAL_DB__ || {});
+  }catch(e){
+    return {version:12,createdAt:new Date().toISOString(),employees:[],clients:[],deletedRecords:[],transfers:[],backups:[]};
+  }
+}
+function normalizeDb(data){
+  data.employees=data.employees||data.friends||[];
+  data.clients=data.clients||[];
+  data.deletedRecords=data.deletedRecords||data.deletedClients||[];
+  data.transfers=data.transfers||[];
+  data.backups=data.backups||[];
+  data.clients=data.clients.map(c=>{
+    if(Array.isArray(c.assignments)){
+      c.assignments=c.assignments.map(a=>({noAnswerCount:0,feedback:'',history:[],...a}));
+      c.history=c.history||[];
+      return c;
+    }
+    const agentId=c.currentAgentId||c.currentFriendId||c.originalAgentId||c.originalFriendId||'';
+    return {
+      id:c.id||uid('cli'),phone:norm(c.phone),note:c.note||'',createdAt:c.createdAt||new Date().toISOString(),
+      history:c.history||[],
+      assignments:agentId?[{
+        id:uid('as'),agentId,status:mapOldStatus(c.status),createdAt:c.createdAt||new Date().toISOString(),
+        lastVerifiedAt:c.lastVerifiedAt||c.returnedAt||null,noAnswerCount:c.noAnswerCount||0,feedback:c.verificationFeedback||'',history:[]
+      }]:[]
+    };
+  });
+  return data;
+}
+function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing'].includes(s)?s:'active'}
+let stateRev = window.__INITIAL_REV__ || 0;
+let saveTimer = null;
+let isSaving = false;
+
+function save(){
+  render();
+  renderVerification();
+  renderTransfer();
+  renderTransferHistory();
+  renderBackupInfo();
+  previewDb();
+  schedulePersist();
+}
+
+function schedulePersist(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistDb, 250);
+}
+
+async function persistDb(){
+  if(isSaving) return;
+  isSaving = true;
+  try{
+    const response = await fetch('/api/state', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({db, rev: stateRev})
+    });
+    if(response.status === 409){
+      alert('Baza a fost modificată de altcineva. Pagina se reîncarcă pentru a evita suprascrierea.');
+      location.reload();
+      return;
+    }
+    if(!response.ok){
+      const txt = await response.text();
+      throw new Error(txt || 'Eroare salvare MongoDB');
+    }
+    const data = await response.json();
+    stateRev = data.rev;
+  }catch(e){
+    console.error(e);
+    alert('Nu am putut salva în MongoDB. Verifică serverul/conexiunea.');
+  }finally{
+    isSaving = false;
+  }
+}
+function activeEmployees(){return db.employees.filter(e=>!e.deleted)}
+function norm(v){
+  return String(v||'').replace(/\D/g,'');
+}
+function isValidPhoneDigits(digits){
+  return /^\d{7,15}$/.test(String(digits||''));
+}
+function looksLikeDate(raw){
+  const s=String(raw||'').trim();
+  if(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/.test(s))return true;
+  if(/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/.test(s))return true;
+  return false;
+}
+function phoneInText(text){
+  const original=String(text||'');
+  const withoutDates=original
+    .replace(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g,' ')
+    .replace(/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/g,' ');
+
+  // 1) Caută bucăți care seamănă a telefon cu spații, paranteze, puncte sau liniuțe
+  const candidates=withoutDates.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g)||[];
+  for(const raw of candidates){
+    if(looksLikeDate(raw))continue;
+    const digits=norm(raw);
+    if(isValidPhoneDigits(digits))return {phone:digits,raw};
+  }
+
+  // 2) Fallback pentru cazuri gen 0728abc319def539-client nou
+  const tokens=withoutDates.split(/\s+/).filter(Boolean);
+  for(const token of tokens){
+    if(looksLikeDate(token))continue;
+    const digits=norm(token);
+    if(isValidPhoneDigits(digits))return {phone:digits,raw:token};
+  }
+
+  return null;
+}
+function clean(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
+function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;")}
+function empName(idv){const e=db.employees.find(x=>x.id===idv);return e?e.name+(e.deleted?' (șters)':''):'Agent necunoscut'}
+function stxt(s){return s==='brown'?'MARO':s==='red'?'ROSU':s==='missing'?'DISPARUT':'ACTIV'}
+function label(s){if(s==='brown')return'<span class="pill brown">MARO</span>';if(s==='red')return'<span class="pill red">ROȘU</span>';if(s==='missing')return'<span class="pill black">DISPĂRUT</span>';return'<span class="pill green">ACTIV</span>'}
+function clientByPhone(phone){return db.clients.find(c=>norm(c.phone)===norm(phone))}
+function activeAssignments(c){return (c?.assignments||[]).filter(a=>!a.transferredAt)}
+function assignmentOf(client,agentId){return activeAssignments(client).find(a=>a.agentId===agentId)}
+function assignmentOfAny(client,agentId){return client?.assignments?.find(a=>a.agentId===agentId)}
+function hasEverBeenTo(client,agentId){return (client?.assignments||[]).some(a=>a.agentId===agentId)}
+function brownHasEligibleAgent(c,a){
+  return activeEmployees().some(e=>e.id!==a.agentId && !hasEverBeenTo(c,e.id));
+}
+function isBrownExhausted(c,a){
+  return a && !a.transferredAt && a.status==='brown' && !brownHasEligibleAgent(c,a);
+}
+function clientHasConflict(c){
+  const active=activeAssignments(c);
+  const statuses=active.map(a=>a.status);
+  return active.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown');
+}
+function clientAgentsHtml(c){
+  const active=activeAssignments(c).map(a=>`<span class="pill ${a.status==='brown'?'brown':a.status==='red'?'red':a.status==='missing'?'black':'green'}">${esc(empName(a.agentId))}: ${stxt(a.status)}${isBrownExhausted(c,a)?' / EPUIZAT':''}</span>`);
+  const hist=(c.assignments||[]).filter(a=>a.transferredAt).map(a=>`<span class="pill gray">${esc(empName(a.agentId))}: ${stxt(a.status)} / transferat</span>`);
+  return active.concat(hist).join(' ');
+}
+function selectOptions(ids,all=false){
+  const opts=activeEmployees().map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+  ids.forEach(id=>{
+    const s=el(id);if(!s)return;const old=s.value;
+    s.innerHTML=(all?'<option value="all">Toți agenții</option>':'')+opts;
+    if(old&&[...s.options].some(o=>o.value===old))s.value=old;
+  });
+}
+function render(){
+  selectOptions(['assignEmp','trTo']);
+  selectOptions(['fEmp','verifyEmpFilter'],true);
+  const mi=el('manualImportAgent');
+  if(mi){
+    const old=mi.value;mi.innerHTML='<option value="auto">Auto detectare</option>'+activeEmployees().map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+    if(old&&[...mi.options].some(o=>o.value===old))mi.value=old;
+  }
+  renderStats();renderAgents();renderEmployeeStats();renderClientsTable();
+}
+function renderStats(){
+  const unique=db.clients.length;
+  const apps=db.clients.flatMap(c=>activeAssignments(c));
+  const active=apps.filter(a=>a.status==='active').length,brown=apps.filter(a=>a.status==='brown').length,red=apps.filter(a=>a.status==='red').length,missing=apps.filter(a=>a.status==='missing').length;
+  const conflicts=db.clients.filter(clientHasConflict).length;
+  const verify=apps.filter(a=>['brown','red','missing'].includes(a.status)).length+conflicts;
+  el('stats').innerHTML=[
+    ['Telefoane unice',unique],['Apariții agenți',apps.length],['ACTIV',active],['MARO',brown],['ROȘU',red],['CONFLICTE',conflicts],['Verificare',verify]
+  ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');
+}
+function renderAgents(){
+  const active=activeEmployees();
+  el('empList').innerHTML=active.length?active.map(e=>`<span class="pill">${esc(e.name)}</span> <button class="small red" onclick="deleteEmp('${e.id}')">Șterge</button>`).join('<br>'):'Nu ai agenți.';
+  const del=db.employees.filter(e=>e.deleted);
+  el('deletedEmpList').classList.toggle('hidden',!del.length);
+  el('deletedEmpList').innerHTML=del.length?'<b>Agenți șterși:</b><br>'+del.map(e=>`<span class="pill gray">${esc(e.name)}</span> <button class="small green" onclick="restoreEmp('${e.id}')">Reactivează</button>`).join('<br>'):'';
+}
+function renderEmployeeStats(){
+  el('empStats').innerHTML=db.employees.length?db.employees.map(e=>{
+    const as=db.clients.flatMap(c=>activeAssignments(c)).filter(a=>a.agentId===e.id);
+    return `<tr><td><b>${esc(empName(e.id))}</b></td><td>${as.length}</td><td>${as.filter(a=>a.status==='active').length}</td><td><span class="pill brown">${as.filter(a=>a.status==='brown').length}</span></td><td><span class="pill red">${as.filter(a=>a.status==='red').length}</span></td><td><span class="pill black">${as.filter(a=>a.status==='missing').length}</span></td></tr>`;
+  }).join(''):'<tr><td colspan="6" class="muted">Nu există agenți.</td></tr>';
+}
+function renderClientsTable(){
+  let rows=db.clients.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const q=clean(el('q')?.value||''),fs=el('fStatus')?.value||'all',fe=el('fEmp')?.value||'all';
+  if(fs==='conflict')rows=rows.filter(clientHasConflict);
+  else if(fs!=='all')rows=rows.filter(c=>activeAssignments(c).some(a=>a.status===fs));
+  if(fe!=='all')rows=rows.filter(c=>activeAssignments(c).some(a=>a.agentId===fe));
+  if(q)rows=rows.filter(c=>clean([c.phone,c.note,clientAgentsHtml(c),(c.history||[]).map(h=>h.text).join(' ')].join(' ')).includes(q));
+  el('clientsTable').innerHTML=rows.length?rows.map(c=>`<tr>
+    <td><div class="phone">${esc(c.phone)}</div><div class="muted">${esc(c.id)}</div></td>
+    <td>${esc(c.note||'')}</td>
+    <td>${clientAgentsHtml(c)}</td>
+    <td>${clientHasConflict(c)?'<span class="pill purple">CONFLICT</span>':'—'}</td>
+    <td>${(c.history||[]).slice(-4).map(h=>`<div class="muted">${esc(h.date)} — ${esc(h.text)}</div>`).join('')}</td>
+  </tr>`).join(''):'<tr><td colspan="5" class="muted">Nu există clienți.</td></tr>';
+}
+function addEmp(){
+  const name=el('empName').value.trim();
+  if(!name)return alert('Scrie numele agentului.');
+  const ex=db.employees.find(e=>e.name.toLowerCase()===name.toLowerCase());
+  if(ex&&!ex.deleted)return alert('Agentul există deja.');
+  if(ex&&ex.deleted){ex.deleted=false;el('empName').value='';save();return}
+  db.employees.push({id:uid('emp'),name,deleted:false});el('empName').value='';save();
+}
+function deleteEmp(idv){const e=db.employees.find(x=>x.id===idv);if(!e)return;if(!confirm(`Ștergi/ascunzi agentul ${e.name}? Istoricul rămâne.`))return;e.deleted=true;save()}
+function restoreEmp(idv){const e=db.employees.find(x=>x.id===idv);if(e){e.deleted=false;save()}}
+
+function parseInputLines(text){
+  const seen=new Set(),out=[];
+  String(text||'').split(/\n+/).forEach(line=>{
+    const p=phoneInText(line);if(!p||seen.has(p.phone))return;seen.add(p.phone);
+    const note=String(line).replace(p.raw,'').replace(/\s+/g,' ').trim();
+    out.push({phone:p.phone,note});
+  });
+  return out;
+}
+function addClients(){
+  const agentId=el('assignEmp')?.value||'';
+  if(!agentId)return alert('Alege agentul.');
+  const parsed=parseInputLines(el('inputClients').value);
+  if(!parsed.length)return alert('Nu am găsit numere valide. Accept orice număr de 7-15 cifre.');
+  const added=[],addedDuplicate=[],same=[];
+  parsed.forEach(p=>{
+    let c=clientByPhone(p.phone);
+    if(!c){
+      c={id:uid('cli'),phone:p.phone,note:p.note||'',createdAt:new Date().toISOString(),history:[],assignments:[]};
+      db.clients.push(c);
+    }else if(p.note && !c.note){c.note=p.note}
+    if(assignmentOfAny(c,agentId)){same.push(p.phone);return}
+    c.assignments.push({id:uid('as'),agentId,status:'active',createdAt:new Date().toISOString(),lastVerifiedAt:null,noAnswerCount:0,feedback:'',history:[{date:now(),text:`Adăugat la ${empName(agentId)} ca ACTIV.`}]});
+    c.history.push({date:now(),text:`Apariție nouă la ${empName(agentId)} ca ACTIV.`});
+    if(c.assignments.length>1)addedDuplicate.push(p.phone); else added.push(p.phone);
+  });
+  save();
+  el('entryReport').innerHTML=`<div class="notice ok"><b>Salvat.</b><br>Adăugate noi: ${added.length}<br>Adăugate ca dublură la agent: ${addedDuplicate.length}<br>Existau deja la agent: ${same.length}</div>
+  ${addedDuplicate.length?`<h3>Dubluri la mai mulți agenți</h3><div class="mono">${esc(addedDuplicate.join('\\n'))}</div>`:''}
+  ${same.length?`<h3>Existau deja la agent</h3><div class="mono">${esc(same.join('\\n'))}</div>`:''}`;
+}
+
+/* Culori import */
+const pasteBox=el('colorPasteBox');
+pasteBox.addEventListener('paste',e=>{lastHtmlPaste=e.clipboardData.getData('text/html')||'';lastTextPaste=e.clipboardData.getData('text/plain')||''});
+function clearPasteBox(){lastHtmlPaste='';lastTextPaste='';el('colorPasteBox').innerHTML='';el('plainPaste').value='';el('parsedPreview').innerHTML='';pendingImport=null}
+function processPasteBox(){let rows=parseColoredHtml(lastHtmlPaste||el('colorPasteBox').innerHTML||'');if(!rows.length)rows=parsePlainRows(lastTextPaste||el('colorPasteBox').innerText||'');processImportedRows(rows)}
+function processPlainText(){processImportedRows(parsePlainRows(el('plainPaste').value))}
+function parsePlainRows(text){
+  const seen=new Set(),out=[];
+  String(text||'').split(/\n+/).forEach(line=>{const p=phoneInText(line);if(!p||seen.has(p.phone))return;seen.add(p.phone);out.push({phone:p.phone,status:statusFromText(line),color:'text',raw:String(line)})});
+  return out;
+}
+function statusFromText(line){const s=clean(line);if(/\b(maro|brown|nu rasp|nerasp)\b/.test(s))return'brown';if(/\b(rosu|red|nu mai caut|stop|renuntat|gata)\b/.test(s))return'red';return'active'}
+function parseColoredHtml(html){
+  const out=[],seen=new Set();if(!html)return out;
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return out}
+  const cells=[...doc.querySelectorAll('td,th')];
+  const nodes=cells.length?cells:[...doc.body.querySelectorAll('*')];
+  nodes.forEach(cell=>{const p=phoneInText(cell.textContent||'');if(!p||seen.has(p.phone))return;seen.add(p.phone);const color=findCellColor(cell);out.push({phone:p.phone,status:statusFromColor(color),color:color||'fără culoare',raw:cell.textContent||''})});
+  return out;
+}
+function findCellColor(node){
+  const colors=[];let n=node;
+  while(n&&n.nodeType===1&&colors.length<8){const st=n.getAttribute('style')||'';const bg=extractCssColor(st,'background-color')||extractCssColor(st,'background');const fg=extractCssColor(st,'color');if(bg)colors.push(bg);if(fg)colors.push(fg);n=n.parentElement}
+  return colors.find(c=>c&&!isWhiteLike(c))||colors[0]||'';
+}
+function extractCssColor(style,prop){const m=String(style||'').match(new RegExp(prop+'\\s*:\\s*([^;]+)','i'));return m?m[1].trim():''}
+function colorToRgb(c){
+  c=String(c||'').trim().toLowerCase();
+  const hex=c.match(/#([0-9a-f]{3}|[0-9a-f]{6})/i);
+  if(hex){let h=hex[1];if(h.length===3)h=h.split('').map(x=>x+x).join('');return{r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)}}
+  const rgb=c.match(/rgba?\s*\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i);if(rgb)return{r:+rgb[1],g:+rgb[2],b:+rgb[3]};
+  return null;
+}
+function isWhiteLike(c){const rgb=colorToRgb(c);return rgb?rgb.r>245&&rgb.g>245&&rgb.b>245:false}
+function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0,l=(max+min)/2;if(max!==min){const d=max-min;s=l>.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h*=60}return{h,s,l}}
+function statusFromColor(color){
+  const raw=String(color||'').trim().toLowerCase().replace(/\s+/g,'');
+  if(raw.includes('#ff0000')||raw.includes('rgb(255,0,0)'))return'red';
+  if(raw.includes('#5b0f00')||raw.includes('rgb(91,15,0)'))return'brown';
+  const rgb=colorToRgb(color);if(!rgb)return'active';
+  const {r,g,b}=rgb,hsl=rgbToHsl(r,g,b);
+  if((hsl.h<=12||hsl.h>=345)&&hsl.s>.22&&hsl.l<.95)return'red';
+  if(r>150&&g<145&&b<145)return'red';
+  if(r>=45&&r<=150&&g<=80&&b<=45&&r>g&&g>=b)return'brown';
+  if(hsl.h>=10&&hsl.h<=45&&hsl.s>.25&&hsl.l<.78)return'brown';
+  return'active';
+}
+
+function analyzeImportRows(rows){
+  const manual=el('manualImportAgent')?.value||'auto';
+  const known=[],extra=[];
+  rows.forEach(r=>{const c=clientByPhone(r.phone);if(c)known.push({...r,client:c});else extra.push(r)});
+  const byAgent={};
+  known.forEach(x=>activeAssignments(x.client).forEach(a=>{byAgent[a.agentId]=(byAgent[a.agentId]||0)+1}));
+  const entries=Object.entries(byAgent).sort((a,b)=>b[1]-a[1]);
+  let detected=manual!=='auto'?manual:(entries[0]?.[0]||'');
+  let ambiguous=false;
+  if(manual==='auto'&&entries.length>1&&entries[0][1]===entries[1][1])ambiguous=true;
+  let changed=0,unchanged=0,willAddAssignment=0,conflicts=0,oldTransferredExists=0;
+  known.forEach(x=>{
+    const as=assignmentOf(x.client,detected);
+    if(as){
+      if(as.status!==x.status)changed++;else unchanged++;
+    }else{
+      willAddAssignment++;
+      if(assignmentOfAny(x.client,detected))oldTransferredExists++;
+    }
+    const active=activeAssignments(x.client);
+    const statuses=active.map(a=>a.agentId===detected?x.status:a.status);
+    if(!as)statuses.push(x.status);
+    if(statuses.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown'))conflicts++;
+  });
+  return{known,extra,entries,detected,ambiguous,changed,unchanged,willAddAssignment,oldTransferredExists,conflicts};
+}
+function summaryCards({active=0,brown=0,red=0,newCount=0,conflict=0}){
+  return `<div class="summary-grid"><div class="summary-card green"><strong>${active}</strong><span>ACTIV</span></div><div class="summary-card brown"><strong>${brown}</strong><span>MARO</span></div><div class="summary-card red"><strong>${red}</strong><span>ROȘU</span></div><div class="summary-card blue"><strong>${newCount}</strong><span>NOI</span></div><div class="summary-card purple"><strong>${conflict}</strong><span>CONFLICT</span></div></div>`;
+}
+function processImportedRows(rows){
+  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';return}
+  const a=analyzeImportRows(rows);pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
+  renderParsedPreview(rows);
+  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
+  const can=!!a.detected&&!a.ambiguous;
+  const entriesText=a.entries.length?a.entries.map(([id,c])=>`${empName(id)}: ${c}`).join('<br>'):'niciun număr cunoscut';
+  let msg='Totul arată bine. Poți aplica.';let cls='ok';
+  if(a.ambiguous){msg='Nu pot decide agentul: scor egal între agenți. Alege agentul sursă manual.';cls='bad'}
+  else if(!a.detected){msg='Nu pot detecta agentul. Alege agentul sursă manual.';cls='bad'}
+  else if(a.conflicts>0){msg=`Atenție: ${a.conflicts} numere au conflict între agenți și vor apărea la Verificare.`;cls='warn'}
+  else if(a.extra.length>0||a.willAddAssignment>0){msg='OK, dar există numere/apariții noi. Le adaug automat la agentul detectat.';cls='warn'}
+  el('retReport').className='notice';
+  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Rezumat import</h3>
+    <div class="notice ${can?'ok':'bad'}">Agent sursă: <b>${a.detected?esc(empName(a.detected)):'nedetectat'}</b></div>
+    ${summaryCards({active,brown,red,newCount:a.extra.length+a.willAddAssignment,conflict:a.conflicts})}
+    <div class="big-status ${cls}">${esc(msg)}</div>
+    ${can?'<button class="green" onclick="applyPendingImport()">Aplică modificările</button>':''}
+    <details class="details-box"><summary>Detalii</summary><div class="notice">Numere lipite: ${rows.length}<br>Găsite în baza mare: ${a.known.length}<br>Numere complet noi: ${a.extra.length}<br>Apariții noi la agent: ${a.willAddAssignment}<br>Atenție: din ele au mai fost cândva la agent: ${a.oldTransferredExists||0}<br>Status schimbate: ${a.changed}<br>Status neschimbate: ${a.unchanged}<br>Distribuție agenți:<br>${entriesText}</div></details>`;
+}
+function applyPendingImport(){
+  if(!pendingImport)return alert('Nu există import pregătit.');
+  const rows=pendingImport.rows,a=analyzeImportRows(rows);
+  if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
+  createAutoBackup(`Înainte de import pentru ${empName(a.detected)}`);
+  let updated=0,addedClients=0,addedAssignments=0,changed=0,conflicts=0;
+  rows.forEach(r=>{
+    let c=clientByPhone(r.phone);
+    if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din import',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
+    let as=assignmentOf(c,a.detected);
+    if(!as){const hadOld=!!assignmentOfAny(c,a.detected);as={id:uid('as'),agentId:a.detected,status:r.status,createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};c.assignments.push(as);addedAssignments++;c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} cu status ${stxt(r.status)}${hadOld?' (mai existase istoric/transferat la acest agent)':''}.`})}
+    else{const old=as.status;as.status=r.status;as.lastVerifiedAt=new Date().toISOString();if(old!==as.status){as.history.push({date:now(),text:`Import Sheet: ${stxt(old)} → ${stxt(as.status)}. Culoare: ${r.color||'n/a'}.`});c.history.push({date:now(),text:`La ${empName(a.detected)}: ${stxt(old)} → ${stxt(as.status)}.`});changed++}}
+    updated++;
+    if(clientHasConflict(c)){conflicts++;c.history.push({date:now(),text:`Conflict detectat între agenți: ${c.assignments.map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`})}
+  });
+  pendingImport=null;save();renderParsedPreview(rows);
+  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
+  el('retReport').className='notice';
+  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Import aplicat</h3><div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>${summaryCards({active,brown,red,newCount:addedClients+addedAssignments,conflict:conflicts})}<div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div><details class="details-box"><summary>Detalii</summary><div class="notice">Verificate: ${updated}<br>Clienți noi: ${addedClients}<br>Apariții noi la agent: ${addedAssignments}<br>Status schimbate: ${changed}<br>Conflicte detectate: ${conflicts}</div></details>`;
+}
+function renderParsedPreview(rows){
+  el('parsedPreview').innerHTML=rows.length?rows.map(r=>{const c=clientByPhone(r.phone);return`<tr><td><div class="phone s-${r.status}">${esc(r.phone)}</div></td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${c?clientAgentsHtml(c):'<span class="pill blue">nou</span>'}</td></tr>`}).join(''):'<tr><td colspan="4" class="muted">Nimic citit.</td></tr>';
+}
+
+/* Verificare */
+function renderVerification(){
+  selectOptions(['verifyEmpFilter'],true);
+  const sf=el('verifyStatusFilter')?.value||'all',ef=el('verifyEmpFilter')?.value||'all',q=clean(el('verifySearch')?.value||'');
+  let rows=[];
+  db.clients.forEach(c=>{
+    const conflict=clientHasConflict(c);
+    activeAssignments(c).forEach(a=>{
+      const exhausted=isBrownExhausted(c,a);
+      if(['brown','red','missing'].includes(a.status)||conflict||exhausted)rows.push({client:c,as:a,conflict,exhausted});
+    });
+  });
+  if(sf==='conflict')rows=rows.filter(r=>r.conflict);
+  else if(sf!=='all')rows=rows.filter(r=>r.as.status===sf);
+  if(ef!=='all')rows=rows.filter(r=>r.as.agentId===ef);
+  if(q)rows=rows.filter(r=>clean([r.client.phone,r.client.note,r.as.feedback,empName(r.as.agentId),clientAgentsHtml(r.client)].join(' ')).includes(q));
+  rows=rows.sort((a,b)=>(b.conflict-a.conflict)||(b.exhausted-a.exhausted)||({missing:0,red:1,brown:2,active:3}[a.as.status]-{missing:0,red:1,brown:2,active:3}[b.as.status]));
+  const conflicts=db.clients.filter(clientHasConflict).length;
+  const exhaustedCount=db.clients.reduce((s,c)=>s+activeAssignments(c).filter(a=>isBrownExhausted(c,a)).length,0);
+  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b>`;
+  el('verifyRows').innerHTML=rows.length?rows.map(r=>`<tr>
+    <td><div class="phone">${esc(r.client.phone)}</div><div class="muted">${esc(r.client.note||'')}</div>${r.conflict?'<span class="pill purple">CONFLICT</span>':''}${r.exhausted?'<span class="pill exhausted">MARO EPUIZAT</span>':''}</td>
+    <td>${esc(empName(r.as.agentId))}<br>${label(r.as.status)}</td>
+    <td>${clientAgentsHtml(r.client)}</td>
+    <td><div class="counter"><button class="small secondary" onclick="changeNoAnswer('${r.client.id}','${r.as.id}',-1)">-</button><strong>${r.as.noAnswerCount||0}</strong><button class="small orange" onclick="changeNoAnswer('${r.client.id}','${r.as.id}',1)">+</button></div></td>
+    <td><textarea class="feedback" id="fb_${r.as.id}" placeholder="Feedback...">${esc(r.as.feedback||'')}</textarea><button class="small green" onclick="saveFeedback('${r.client.id}','${r.as.id}')">Salvează</button></td>
+    <td><button class="small red" onclick="deleteAssignment('${r.client.id}','${r.as.id}')">Șterge apariția</button><br><button class="small secondary" onclick="deleteClientForever('${r.client.id}')">Șterge tot</button></td>
+  </tr>`).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
+}
+function findAs(clientId,asId){const c=db.clients.find(x=>x.id===clientId);return[c,c?.assignments?.find(a=>a.id===asId)]}
+function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!a)return;a.noAnswerCount=Math.max(0,(a.noAnswerCount||0)+delta);a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}
+function saveFeedback(clientId,asId){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=(el('fb_'+asId)?.value||'').trim();a.history.push({date:now(),text:`Feedback salvat: ${a.feedback||'(gol)'}`});save()}
+function deleteAssignment(clientId,asId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;const a=c.assignments.find(x=>x.id===asId);if(!a)return;if(!confirm(`Ștergi apariția numărului ${c.phone} la ${empName(a.agentId)}?`))return;db.deletedRecords.push({type:'assignment',client:clone(c),assignment:clone(a),deletedAt:new Date().toISOString(),deletedAtRo:now()});c.assignments=c.assignments.filter(x=>x.id!==asId);c.history.push({date:now(),text:`Apariția la ${empName(a.agentId)} a fost ștearsă din baza activă.`});if(!c.assignments.length)db.clients=db.clients.filter(x=>x.id!==clientId);save()}
+function deleteClientForever(clientId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;if(!confirm(`Ștergi complet numărul ${c.phone} din baza activă?`))return;db.deletedRecords.push({type:'client',client:clone(c),deletedAt:new Date().toISOString(),deletedAtRo:now()});db.clients=db.clients.filter(x=>x.id!==clientId);save()}
+
+/* Transfer */
+function renderTransfer(){
+  selectOptions(['trTo']);
+  const to=el('trTo')?.value||'';
+  if(!to){el('trInfo').innerHTML='Alege agentul destinație.';el('trRows').innerHTML='<tr><td colspan="5" class="muted">Nu există agent destinație.</td></tr>';return}
+  let rows=[];
+  db.clients.forEach(c=>activeAssignments(c).forEach(a=>{if(a.status==='brown'&&a.agentId!==to&&!hasEverBeenTo(c,to))rows.push({client:c,as:a})}));
+  rows.sort((a,b)=>(a.as.lastVerifiedAt||a.as.createdAt||'').localeCompare(b.as.lastVerifiedAt||b.as.createdAt||''));
+  const by={};rows.forEach(r=>by[r.as.agentId]=(by[r.as.agentId]||0)+1);
+  el('trInfo').innerHTML=`Către <b>${esc(empName(to))}</b> | Eligibile: <b>${rows.length}</b><br>Surse: ${Object.entries(by).map(([id,c])=>empName(id)+': '+c).join(' | ')||'—'}`;
+  el('trRows').innerHTML=rows.length?rows.map(r=>`<tr><td><input type="checkbox" class="trChk" value="${r.client.id}::${r.as.id}"></td><td><div class="phone s-brown">${esc(r.client.phone)}</div></td><td>${esc(r.client.note||'')}</td><td>${esc(empName(r.as.agentId))}</td><td>${r.client.assignments.map(a=>`<span class="pill gray">${esc(empName(a.agentId))}</span>`).join('')}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">Nu există MARO eligibile.</td></tr>';
+}
+function toggleAll(v){document.querySelectorAll('.trChk').forEach(x=>x.checked=v)}
+function selectFirstTransfer(n){[...document.querySelectorAll('.trChk')].forEach((x,i)=>x.checked=i<n)}
+function selectFirstTransferFromInput(){const n=parseInt(el('transferCount')?.value||'0',10);if(!n)return alert('Scrie un număr valid.');selectFirstTransfer(n)}
+function transferBrown(){
+  const to=el('trTo')?.value||'';if(!to)return alert('Alege agentul destinație.');
+  const vals=[...document.querySelectorAll('.trChk:checked')].map(x=>x.value);if(!vals.length)return alert('Selectează clienți.');
+  createAutoBackup(`Înainte de transfer MARO către ${empName(to)}`);
+  const moved=[],blocked=[],sourceCounter={};
+
+  vals.forEach(v=>{
+    const [cid,aid]=v.split('::');
+    const c=db.clients.find(x=>x.id===cid);
+    const a=c?.assignments.find(x=>x.id===aid);
+    if(!c||!a)return;
+    if(assignmentOf(c,to)){blocked.push(c);return}
+
+    a.transferredAt=new Date().toISOString();
+    a.transferredToAgentId=to;
+    sourceCounter[a.agentId]=(sourceCounter[a.agentId]||0)+1;
+
+    c.assignments.push({
+      id:uid('as'),
+      agentId:to,
+      status:'active',
+      createdAt:new Date().toISOString(),
+      lastVerifiedAt:null,
+      noAnswerCount:0,
+      feedback:'',
+      history:[{date:now(),text:`Primit prin transfer MARO de la ${empName(a.agentId)}.`}]
+    });
+    c.history.push({date:now(),text:`Transfer MARO de la ${empName(a.agentId)} către ${empName(to)}. Noua apariție este ACTIV.`});
+    moved.push({client:c,fromAgentId:a.agentId,sourceAssignmentId:a.id});
+  });
+
+  if(moved.length){
+    const transferId=uid('tr');
+    const items=moved.map(x=>({
+      clientId:x.client.id,
+      phone:x.client.phone,
+      note:x.client.note||'',
+      fromAgentId:x.fromAgentId,
+      toAgentId:to,
+      sourceAssignmentId:x.sourceAssignmentId
+    }));
+    db.transfers=db.transfers||[];
+    db.transfers.push({
+      id:transferId,
+      createdAt:new Date().toISOString(),
+      createdAtRo:now(),
+      toAgentId:to,
+      sourceCounter,
+      count:items.length,
+      items
+    });
+  }
+
+  save();
+
+  const sources=Object.entries(sourceCounter).map(([id,c])=>empName(id)+': '+c).join(' | ');
+  if(moved.length){
+    const text=transferTextFromItems(moved.map(x=>({
+      phone:x.client.phone,
+      note:x.client.note||'',
+      fromAgentId:x.fromAgentId
+    })));
+    copyTextToClipboard(text,`Transferate către ${empName(to)}: ${moved.length}. Lista a fost copiată în clipboard. Surse: ${sources||'—'}. Blocate: ${blocked.length}.`);
+  }else{
+    alert(`Nu s-a transferat nimic. Blocate: ${blocked.length}.`);
+  }
+}
+
+
+
+/* Istoric transferuri */
+function transferTextFromItems(items){
+  return (items||[]).map(i=>`${i.phone}\t${i.note||''}`).join('\n');
+}
+function copyTransfer(transferId){
+  const t=(db.transfers||[]).find(x=>x.id===transferId);
+  if(!t)return alert('Transfer inexistent.');
+  copyTextToClipboard(transferTextFromItems(t.items),`Lista transferului către ${empName(t.toAgentId)} a fost copiată.`);
+}
+function renderTransferHistory(){
+  const box=el('transferHistoryRows');
+  if(!box)return;
+  db.transfers=db.transfers||[];
+  const rows=db.transfers.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
+  const total=rows.reduce((s,t)=>s+(t.items?.length||0),0);
+  el('transferHistoryStats').innerHTML=`Batch-uri: <b>${rows.length}</b><br>Numere transferate total: <b>${total}</b>`;
+
+  if(!rows.length){
+    box.innerHTML='<div class="notice">Nu există transferuri încă.</div>';
+    return;
+  }
+
+  box.innerHTML=rows.map(t=>{
+    const sources=Object.entries(t.sourceCounter||{}).map(([id,c])=>`${empName(id)}: ${c}`).join(' | ')||'—';
+    const nums=(t.items||[]).slice(0,25).map(i=>`${i.phone}${i.note?' — '+esc(i.note):''}`).join('<br>');
+    const more=(t.items||[]).length>25?`<br><span class="muted">+ încă ${(t.items||[]).length-25} numere</span>`:'';
+    return `<div class="transfer-batch">
+      <h3>Transfer către ${esc(empName(t.toAgentId))} <span class="pill brown">${t.count||t.items?.length||0} numere</span></h3>
+      <div class="muted">${esc(t.createdAtRo||'')}<br>Surse: ${esc(sources)}</div>
+      <div class="notice">${nums}${more}</div>
+      <div class="transfer-actions">
+        <button class="small green" onclick="copyTransfer('${t.id}')">Copiază lista</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* Backup */
+function createAutoBackup(reason){db.backups=db.backups||[];db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:{version:db.version,createdAt:db.createdAt,employees:clone(db.employees),clients:clone(db.clients),deletedRecords:clone(db.deletedRecords||[]),transfers:clone(db.transfers||[])}});if(db.backups.length>10)db.backups=db.backups.slice(-10)}
+function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');if(!confirm(`Revii la backup-ul din ${b.createdAtRo}?`))return;const keep=db.backups;db={...clone(b.data),backups:keep};save()}
+function renderBackupInfo(){const box=el('backupInfo');if(!box)return;const b=db.backups?.[db.backups.length-1];box.innerHTML=b?`Ultimul backup: <b>${esc(b.createdAtRo)}</b><br>${esc(b.reason||'')}`:'Încă nu există backup automat.'}
+function exportDb(){download(db,'baza_sita_mongo_v12.json')}
+function copyDb(){navigator.clipboard.writeText(JSON.stringify(db,null,2)).then(()=>alert('JSON copiat.')).catch(()=>alert('Nu pot copia automat.'))}
+function importDbFile(ev){const f=ev.target.files[0];if(!f)return;if(!confirm('Înlocuiești baza locală?'))return;const r=new FileReader();r.onload=()=>{try{db=normalizeDb(JSON.parse(r.result));save();alert('Bază importată.')}catch(e){alert('Fișier invalid.')}};r.readAsText(f);ev.target.value=''}
+async function resetDb(){
+  if(!confirm('Ștergi baza din MongoDB? Fă backup înainte.'))return;
+  try{
+    const response = await fetch('/api/reset', {method:'POST'});
+    if(!response.ok) throw new Error(await response.text());
+    location.reload();
+  }catch(e){
+    alert('Nu am putut reseta baza.');
+  }
+}
+function previewDb(){el('preview').textContent=JSON.stringify(db,null,2).slice(0,9000)}
+function download(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
+
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['dash','agents','add','return','verify','transfer','transferHistory','backup'].forEach(t=>el('tab-'+t).classList.toggle('hidden',b.dataset.tab!==t));save()});
+save();
+</script>
+</body>
+</html>

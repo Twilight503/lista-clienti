@@ -27,7 +27,7 @@ collection = mongo_db[COLLECTION_NAME]
 
 def empty_state():
     return {
-        "version": 12,
+        "version": 13,
         "createdAt": datetime.utcnow().isoformat(),
         "employees": [],
         "clients": [],
@@ -43,7 +43,7 @@ def public_state(doc):
     state = deepcopy(doc)
     state.pop("_id", None)
     rev = int(state.pop("_rev", 0) or 0)
-    state.setdefault("version", 12)
+    state.setdefault("version", 13)
     state.setdefault("createdAt", datetime.utcnow().isoformat())
     state.setdefault("employees", [])
     state.setdefault("clients", [])

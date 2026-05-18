@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Sită clienți Mongo v12</title>
+<title>Sită clienți Mongo v13</title>
 <style>
 :root{
   --bg:#f4f6f8;--card:#fff;--text:#172033;--muted:#667085;--border:#d9dee7;
@@ -61,14 +61,14 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 </style>
 </head>
 <body>
-<header><div><h1>Sită clienți Mongo v12</h1><p class="subtitle">Baza se salvează în MongoDB. Poate fi folosită de pe mai multe calculatoare cu aceeași bază.</p></div></header>
+<header><div><h1>Sită clienți Mongo v13</h1><p class="subtitle">Baza se salvează în MongoDB. Importul primește lista actuală a agentului: lipsesc doar ACTIVELE care nu mai apar, iar MARO/ROȘU deja scoase nu mai sunt așteptate.</p></div></header>
 
 <main>
 <div class="tabs">
   <button class="tab active" data-tab="dash">Dashboard</button>
   <button class="tab" data-tab="agents">Agenți</button>
   <button class="tab" data-tab="add">Adaugă numere</button>
-  <button class="tab" data-tab="return">Import MARO/ROȘU</button>
+  <button class="tab" data-tab="return">Import listă agent</button>
   <button class="tab" data-tab="verify">Verificare</button>
   <button class="tab" data-tab="transfer">Transfer MARO</button>
   <button class="tab" data-tab="transferHistory">Istoric transferuri</button>
@@ -127,7 +127,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
       <h2>Adaugă numere</h2>
       <label>Agent</label><select id="assignEmp"></select>
       <label>Telefon + notă opțională</label>
-      <textarea id="inputClients" placeholder="728319539-client nou&#10;447911123456 client UK&#10;004917612345678 client DE"></textarea>
+      <textarea id="inputClients" placeholder="728319539 Maria - 2 camere Iancului&#10;0728319539 Popescu - garsonieră&#10;+40733444555"></textarea>
       <div class="row"><button onclick="addClients()">Salvează</button><button class="secondary" onclick="el('inputClients').value=''">Curăță</button></div>
     </div>
     <div class="card c7"><h2>Raport</h2><div id="entryReport" class="notice">Încă nu ai adăugat numere.</div></div>
@@ -137,16 +137,16 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 <section id="tab-return" class="hidden">
   <div class="grid">
     <div class="card c5" id="importInputBox">
-      <h2>Import MARO/ROȘU din Sheet</h2>
-      <div class="notice warn">Lipește doar numerele scoase din Sheet. Culoarea celulei decide statusul. Dacă agentul nu e detectat clar, poți alege manual sursa.</div>
+      <h2>Import listă agent</h2>
+      <div class="notice warn">Lipește lista actuală completă a agentului. Ce lipsește dintre ACTIVE devine DISPĂRUT. MARO/ROȘU deja scoase nu mai sunt așteptate.</div>
       <label>Agent sursă</label>
       <select id="manualImportAgent"></select>
       <div class="muted">Lasă pe Auto dacă lista are majoritatea numerelor de la același agent.</div>
       <label>Zonă paste colorată</label>
-      <div id="colorPasteBox" class="pastebox" contenteditable="true" data-placeholder="Click aici și dă Ctrl+V cu numerele MARO/ROȘU scoase din Google Sheets..."></div>
-      <div class="row"><button class="orange" onclick="processPasteBox()">Analizează</button><button class="secondary" onclick="clearPasteBox()">Curăță</button></div>
+      <div id="colorPasteBox" class="pastebox" contenteditable="true" data-placeholder="Click aici și dă Ctrl+V cu lista actuală a agentului din Google Sheets..."></div>
+      <div class="row"><button class="orange" onclick="processPasteBox()">Analizează lista</button><button class="secondary" onclick="clearPasteBox()">Curăță</button></div>
       <h3>Text simplu</h3>
-      <textarea id="plainPaste" placeholder="728319539	rosu&#10;0728319539	maro"></textarea>
+      <textarea id="plainPaste" placeholder="728319539&#10;0728319539 maro&#10;447911123456 rosu"></textarea>
       <button class="ghost" onclick="processPlainText()">Analizează text simplu</button>
     </div>
     <div class="card c7">
@@ -244,7 +244,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 <script>
 window.__INITIAL_DB__ = {{ initial_db|tojson }};
 window.__INITIAL_REV__ = {{ rev|tojson }};
-const KEY='mongo_state_v12';
+const KEY='mongo_state_v13';
 let db=loadDb();
 let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
 
@@ -267,7 +267,7 @@ function loadDb(){
   try{
     return normalizeDb(window.__INITIAL_DB__ || {});
   }catch(e){
-    return {version:12,createdAt:new Date().toISOString(),employees:[],clients:[],deletedRecords:[],transfers:[],backups:[]};
+    return {version:13,createdAt:new Date().toISOString(),employees:[],clients:[],deletedRecords:[],transfers:[],backups:[]};
   }
 }
 function normalizeDb(data){
@@ -360,7 +360,6 @@ function phoneInText(text){
     .replace(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/g,' ')
     .replace(/\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b/g,' ');
 
-  // 1) Caută bucăți care seamănă a telefon cu spații, paranteze, puncte sau liniuțe
   const candidates=withoutDates.match(/(?:\+|00)?\d[\d\s().-]{5,}\d/g)||[];
   for(const raw of candidates){
     if(looksLikeDate(raw))continue;
@@ -368,14 +367,12 @@ function phoneInText(text){
     if(isValidPhoneDigits(digits))return {phone:digits,raw};
   }
 
-  // 2) Fallback pentru cazuri gen 0728abc319def539-client nou
   const tokens=withoutDates.split(/\s+/).filter(Boolean);
   for(const token of tokens){
     if(looksLikeDate(token))continue;
     const digits=norm(token);
     if(isValidPhoneDigits(digits))return {phone:digits,raw:token};
   }
-
   return null;
 }
 function clean(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
@@ -484,7 +481,7 @@ function addClients(){
   const agentId=el('assignEmp')?.value||'';
   if(!agentId)return alert('Alege agentul.');
   const parsed=parseInputLines(el('inputClients').value);
-  if(!parsed.length)return alert('Nu am găsit numere valide. Accept orice număr de 7-15 cifre.');
+  if(!parsed.length)return alert('Nu am găsit numere valide.');
   const added=[],addedDuplicate=[],same=[];
   parsed.forEach(p=>{
     let c=clientByPhone(p.phone);
@@ -555,12 +552,24 @@ function analyzeImportRows(rows){
   const manual=el('manualImportAgent')?.value||'auto';
   const known=[],extra=[];
   rows.forEach(r=>{const c=clientByPhone(r.phone);if(c)known.push({...r,client:c});else extra.push(r)});
+
   const byAgent={};
   known.forEach(x=>activeAssignments(x.client).forEach(a=>{byAgent[a.agentId]=(byAgent[a.agentId]||0)+1}));
   const entries=Object.entries(byAgent).sort((a,b)=>b[1]-a[1]);
   let detected=manual!=='auto'?manual:(entries[0]?.[0]||'');
   let ambiguous=false;
   if(manual==='auto'&&entries.length>1&&entries[0][1]===entries[1][1])ambiguous=true;
+
+  const pastedPhones=new Set(rows.map(r=>norm(r.phone)));
+  const expectedActive=[];
+  if(detected){
+    db.clients.forEach(c=>{
+      const a=assignmentOf(c,detected);
+      if(a && a.status==='active') expectedActive.push({client:c,as:a});
+    });
+  }
+  const missingActive=detected?expectedActive.filter(x=>!pastedPhones.has(norm(x.client.phone))):[];
+
   let changed=0,unchanged=0,willAddAssignment=0,conflicts=0,oldTransferredExists=0;
   known.forEach(x=>{
     const as=assignmentOf(x.client,detected);
@@ -575,50 +584,130 @@ function analyzeImportRows(rows){
     if(!as)statuses.push(x.status);
     if(statuses.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown'))conflicts++;
   });
-  return{known,extra,entries,detected,ambiguous,changed,unchanged,willAddAssignment,oldTransferredExists,conflicts};
-}
-function summaryCards({active=0,brown=0,red=0,newCount=0,conflict=0}){
-  return `<div class="summary-grid"><div class="summary-card green"><strong>${active}</strong><span>ACTIV</span></div><div class="summary-card brown"><strong>${brown}</strong><span>MARO</span></div><div class="summary-card red"><strong>${red}</strong><span>ROȘU</span></div><div class="summary-card blue"><strong>${newCount}</strong><span>NOI</span></div><div class="summary-card purple"><strong>${conflict}</strong><span>CONFLICT</span></div></div>`;
+
+  // Dacă un ACTIV dispare și același telefon este încă ACTIV/MARO la alt agent, va fi conflict/verificare.
+  let missingConflicts=0;
+  missingActive.forEach(x=>{
+    const statuses=activeAssignments(x.client).map(a=>a.agentId===detected?'missing':a.status);
+    if(statuses.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown'))missingConflicts++;
+  });
+  conflicts += missingConflicts;
+
+  return{known,extra,entries,detected,ambiguous,changed,unchanged,willAddAssignment,oldTransferredExists,conflicts,expectedActive,missingActive,missingConflicts};
 }
 function processImportedRows(rows){
-  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';return}
-  const a=analyzeImportRows(rows);pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
+  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide.';return}
+  const a=analyzeImportRows(rows);
+  pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
   renderParsedPreview(rows);
-  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
+
+  const active=rows.filter(x=>x.status==='active').length;
+  const brown=rows.filter(x=>x.status==='brown').length;
+  const red=rows.filter(x=>x.status==='red').length;
+  const missing=a.missingActive.length;
   const can=!!a.detected&&!a.ambiguous;
   const entriesText=a.entries.length?a.entries.map(([id,c])=>`${empName(id)}: ${c}`).join('<br>'):'niciun număr cunoscut';
-  let msg='Totul arată bine. Poți aplica.';let cls='ok';
+
+  let msg='Totul arată bine. Poți aplica.';
+  let cls='ok';
   if(a.ambiguous){msg='Nu pot decide agentul: scor egal între agenți. Alege agentul sursă manual.';cls='bad'}
   else if(!a.detected){msg='Nu pot detecta agentul. Alege agentul sursă manual.';cls='bad'}
+  else if(missing>0){msg=`Atenție: ${missing} numere ACTIVE lipsesc din lista lipită și vor deveni DISPĂRUT.`;cls='warn'}
   else if(a.conflicts>0){msg=`Atenție: ${a.conflicts} numere au conflict între agenți și vor apărea la Verificare.`;cls='warn'}
   else if(a.extra.length>0||a.willAddAssignment>0){msg='OK, dar există numere/apariții noi. Le adaug automat la agentul detectat.';cls='warn'}
+
   el('retReport').className='notice';
   el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Rezumat import</h3>
     <div class="notice ${can?'ok':'bad'}">Agent sursă: <b>${a.detected?esc(empName(a.detected)):'nedetectat'}</b></div>
-    ${summaryCards({active,brown,red,newCount:a.extra.length+a.willAddAssignment,conflict:a.conflicts})}
+    ${summaryCards({active,brown,red,missing,newCount:a.extra.length+a.willAddAssignment,conflict:a.conflicts})}
     <div class="big-status ${cls}">${esc(msg)}</div>
     ${can?'<button class="green" onclick="applyPendingImport()">Aplică modificările</button>':''}
-    <details class="details-box"><summary>Detalii</summary><div class="notice">Numere lipite: ${rows.length}<br>Găsite în baza mare: ${a.known.length}<br>Numere complet noi: ${a.extra.length}<br>Apariții noi la agent: ${a.willAddAssignment}<br>Atenție: din ele au mai fost cândva la agent: ${a.oldTransferredExists||0}<br>Status schimbate: ${a.changed}<br>Status neschimbate: ${a.unchanged}<br>Distribuție agenți:<br>${entriesText}</div></details>`;
+    ${can&&missing?`<h3>Vor deveni DISPĂRUT</h3><div class="mono">${esc(a.missingActive.map(x=>`${x.client.phone} | ${x.client.note||''}`).join('\\n'))}</div>`:''}
+    <details class="details-box"><summary>Detalii</summary><div class="notice">
+      Numere lipite: ${rows.length}<br>
+      Găsite în baza mare: ${a.known.length}<br>
+      Numere complet noi: ${a.extra.length}<br>
+      Apariții noi la agent: ${a.willAddAssignment}<br>
+      Active așteptate la agent: ${a.expectedActive.length}<br>
+      Active lipsă => DISPĂRUT: ${a.missingActive.length}<br>
+      Au mai fost cândva la agent: ${a.oldTransferredExists||0}<br>
+      Status schimbate: ${a.changed}<br>
+      Status neschimbate: ${a.unchanged}<br>
+      Distribuție agenți:<br>${entriesText}
+    </div></details>`;
 }
 function applyPendingImport(){
   if(!pendingImport)return alert('Nu există import pregătit.');
   const rows=pendingImport.rows,a=analyzeImportRows(rows);
   if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
-  createAutoBackup(`Înainte de import pentru ${empName(a.detected)}`);
-  let updated=0,addedClients=0,addedAssignments=0,changed=0,conflicts=0;
+  createAutoBackup(`Înainte de import listă agent pentru ${empName(a.detected)}`);
+
+  let updated=0,addedClients=0,addedAssignments=0,changed=0,conflicts=0,markedMissing=0;
   rows.forEach(r=>{
     let c=clientByPhone(r.phone);
-    if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din import',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
+    if(!c){
+      c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din import listă agent',createdAt:new Date().toISOString(),history:[],assignments:[]};
+      db.clients.push(c);
+      addedClients++;
+    }
     let as=assignmentOf(c,a.detected);
-    if(!as){const hadOld=!!assignmentOfAny(c,a.detected);as={id:uid('as'),agentId:a.detected,status:r.status,createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};c.assignments.push(as);addedAssignments++;c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} cu status ${stxt(r.status)}${hadOld?' (mai existase istoric/transferat la acest agent)':''}.`})}
-    else{const old=as.status;as.status=r.status;as.lastVerifiedAt=new Date().toISOString();if(old!==as.status){as.history.push({date:now(),text:`Import Sheet: ${stxt(old)} → ${stxt(as.status)}. Culoare: ${r.color||'n/a'}.`});c.history.push({date:now(),text:`La ${empName(a.detected)}: ${stxt(old)} → ${stxt(as.status)}.`});changed++}}
+    if(!as){
+      const hadOld=!!assignmentOfAny(c,a.detected);
+      as={id:uid('as'),agentId:a.detected,status:r.status,createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};
+      c.assignments.push(as);
+      addedAssignments++;
+      c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} cu status ${stxt(r.status)}${hadOld?' (mai existase istoric/transferat la acest agent)':''}.`});
+    }else{
+      const old=as.status;
+      as.status=r.status;
+      as.lastVerifiedAt=new Date().toISOString();
+      if(old!==as.status){
+        as.history.push({date:now(),text:`Import listă agent: ${stxt(old)} → ${stxt(as.status)}. Culoare: ${r.color||'n/a'}.`});
+        c.history.push({date:now(),text:`La ${empName(a.detected)}: ${stxt(old)} → ${stxt(as.status)}.`});
+        changed++;
+      }
+    }
     updated++;
-    if(clientHasConflict(c)){conflicts++;c.history.push({date:now(),text:`Conflict detectat între agenți: ${c.assignments.map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`})}
   });
+
+  // Marchează DISPĂRUT doar ce era ACTIV la agent și nu mai apare în lista actuală lipită.
+  a.missingActive.forEach(x=>{
+    const c=db.clients.find(client=>client.id===x.client.id);
+    const as=c?.assignments.find(ass=>ass.id===x.as.id);
+    if(!c||!as||as.status!=='active'||as.transferredAt)return;
+    as.status='missing';
+    as.lastVerifiedAt=new Date().toISOString();
+    as.history=as.history||[];
+    as.history.push({date:now(),text:`Nu s-a regăsit în lista actuală importată pentru ${empName(a.detected)}. ACTIV → DISPĂRUT.`});
+    c.history=c.history||[];
+    c.history.push({date:now(),text:`La ${empName(a.detected)}: ACTIV → DISPĂRUT pentru că nu mai apare în lista actuală.`});
+    markedMissing++;
+  });
+
+  db.clients.forEach(c=>{
+    if(clientHasConflict(c)){
+      conflicts++;
+      c.history=c.history||[];
+      c.history.push({date:now(),text:`Conflict detectat între agenți: ${activeAssignments(c).map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`});
+    }
+  });
+
   pendingImport=null;save();renderParsedPreview(rows);
   const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
   el('retReport').className='notice';
-  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Import aplicat</h3><div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>${summaryCards({active,brown,red,newCount:addedClients+addedAssignments,conflict:conflicts})}<div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div><details class="details-box"><summary>Detalii</summary><div class="notice">Verificate: ${updated}<br>Clienți noi: ${addedClients}<br>Apariții noi la agent: ${addedAssignments}<br>Status schimbate: ${changed}<br>Conflicte detectate: ${conflicts}</div></details>`;
+  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Import aplicat</h3>
+    <div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>
+    ${summaryCards({active,brown,red,missing:markedMissing,newCount:addedClients+addedAssignments,conflict:conflicts})}
+    <div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div>
+    <details class="details-box"><summary>Detalii</summary><div class="notice">
+      Numere lipite: ${rows.length}<br>
+      Verificate/actualizate: ${updated}<br>
+      Clienți noi: ${addedClients}<br>
+      Apariții noi la agent: ${addedAssignments}<br>
+      Status schimbate: ${changed}<br>
+      Marcate DISPĂRUT: ${markedMissing}<br>
+      Conflicte active în bază: ${conflicts}
+    </div></details>`;
 }
 function renderParsedPreview(rows){
   el('parsedPreview').innerHTML=rows.length?rows.map(r=>{const c=clientByPhone(r.phone);return`<tr><td><div class="phone s-${r.status}">${esc(r.phone)}</div></td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${c?clientAgentsHtml(c):'<span class="pill blue">nou</span>'}</td></tr>`}).join(''):'<tr><td colspan="4" class="muted">Nimic citit.</td></tr>';
@@ -785,7 +874,7 @@ function renderTransferHistory(){
 function createAutoBackup(reason){db.backups=db.backups||[];db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:{version:db.version,createdAt:db.createdAt,employees:clone(db.employees),clients:clone(db.clients),deletedRecords:clone(db.deletedRecords||[]),transfers:clone(db.transfers||[])}});if(db.backups.length>10)db.backups=db.backups.slice(-10)}
 function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');if(!confirm(`Revii la backup-ul din ${b.createdAtRo}?`))return;const keep=db.backups;db={...clone(b.data),backups:keep};save()}
 function renderBackupInfo(){const box=el('backupInfo');if(!box)return;const b=db.backups?.[db.backups.length-1];box.innerHTML=b?`Ultimul backup: <b>${esc(b.createdAtRo)}</b><br>${esc(b.reason||'')}`:'Încă nu există backup automat.'}
-function exportDb(){download(db,'baza_sita_mongo_v12.json')}
+function exportDb(){download(db,'baza_sita_mongo_v13.json')}
 function copyDb(){navigator.clipboard.writeText(JSON.stringify(db,null,2)).then(()=>alert('JSON copiat.')).catch(()=>alert('Nu pot copia automat.'))}
 function importDbFile(ev){const f=ev.target.files[0];if(!f)return;if(!confirm('Înlocuiești baza locală?'))return;const r=new FileReader();r.onload=()=>{try{db=normalizeDb(JSON.parse(r.result));save();alert('Bază importată.')}catch(e){alert('Fișier invalid.')}};r.readAsText(f);ev.target.value=''}
 async function resetDb(){

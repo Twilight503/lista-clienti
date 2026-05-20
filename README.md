@@ -52,3 +52,10 @@ Regulă nouă:
 - ROȘU este doar roșul oficial folosit în Google Sheets: `#ff0000` / aproape identic.
 - Roșu închis, vișiniu, bordo, maro-roșcat, brun, cafeniu, mahon => MARO.
 - Magenta/roz neon, galben, verde, albastru, cyan, gri, alb, negru => ACTIV.
+
+## Fix strict culori Google Sheets
+
+Regula curentă:
+- ROȘU = doar roșul aprins oficial `#ff0000`.
+- MARO = doar nuanțele închise folosite ca maro: roșu închis/bordo/maro-roșcat/brun/cafeniu închis.
+- Portocaliu aprins `#ff9900`, galben, magenta, verde, albastru, cyan, gri, alb, negru = ACTIV.

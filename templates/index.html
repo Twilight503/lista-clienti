@@ -903,77 +903,46 @@ function parseCssColorToRgb(color){
   }
 
   if(raw.includes('red'))return{r:255,g:0,b:0,raw};
-  if(raw.includes('brown'))return{r:120,g:63,b:4,raw};
+  if(raw.includes('brown'))return{r:91,g:15,b:0,raw};
 
   return null;
 }
 
-function rgbToHsl(r,g,b){
-  r/=255;g/=255;b/=255;
-  const max=Math.max(r,g,b),min=Math.min(r,g,b);
-  let h=0,s=0,l=(max+min)/2;
-  if(max!==min){
-    const d=max-min;
-    s=l>0.5?d/(2-max-min):d/(max+min);
-    switch(max){
-      case r:h=(g-b)/d+(g<b?6:0);break;
-      case g:h=(b-r)/d+2;break;
-      case b:h=(r-g)/d+4;break;
-    }
-    h*=60;
-  }
-  return{h,s,l};
+function colorDistance(c,target){
+  return Math.sqrt(
+    Math.pow(c.r-target[0],2)+
+    Math.pow(c.g-target[1],2)+
+    Math.pow(c.b-target[2],2)
+  );
 }
 
-function isExactUsedRed(c){
-  // Singurul roșu oficial folosit în Sheet.
-  // Punem toleranță mică pentru exporturi browser/Sheets.
-  return c.r>=245 && c.g<=12 && c.b<=12;
+function isNear(c,target,tolerance=28){
+  return colorDistance(c,target)<=tolerance;
 }
 
 function statusFromColor(color){
   const c=parseCssColorToRgb(color);
   if(!c)return'active';
 
-  const {r,g,b}=c;
-  const {h,s,l}=rgbToHsl(r,g,b);
+  // ROȘU = doar roșul aprins oficial din Google Sheets.
+  // Adică al doilea roșu din rândul de culori intense: #ff0000.
+  if(isNear(c,[255,0,0],28))return'red';
 
-  // Alb, gri, negru sau culori foarte șterse = ACTIV.
-  if(s<0.18)return'active';
+  // MARO = doar nuanțele ÎNCHISE pe care le folosiți ca maro.
+  // Orange/portocaliu aprins (#ff9900), galben, magenta, verde, albastru etc. rămân ACTIV.
+  const darkBrownGooglePalette=[
+    [152,0,0],   // #980000 - roșu foarte închis, folosit ca maro
+    [204,0,0],   // #cc0000 - roșu închis, folosit ca maro
+    [153,0,0],   // #990000 - roșu închis, folosit ca maro
+    [102,0,0],   // #660000 - roșu foarte închis, folosit ca maro
+    [166,28,0],  // #a61c00 - maro-roșcat închis
+    [133,32,12], // #85200c - maro-roșcat închis
+    [91,15,0],   // #5b0f00 - maro închis
+    [180,95,6],  // #b45f06 - brun / cafeniu închis
+    [120,63,4]   // #783f04 - maro închis
+  ];
 
-  // IMPORTANT:
-  // ROȘU se detectează DOAR pentru roșul oficial folosit de noi (#ff0000 / aproape identic).
-  // Orice roșu închis, vișiniu, bordo, maro-roșcat etc. intră la MARO.
-  if(isExactUsedRed(c))return'red';
-
-  // Nu confundăm magenta/roz neon, galben, verde, albastru, cyan cu MARO.
-  const isMagentaOrPink = h>=285 && h<=340 && r>=150 && b>=120;
-  const isYellow = h>=48 && h<=70 && r>=170 && g>=140;
-  const isGreenBlueCyan = h>=70 && h<=250;
-  if(isMagentaOrPink || isYellow || isGreenBlueCyan)return'active';
-
-  // MARO = maro/brun/cafeniu/mahon + roșu închis/vișiniu/bordo.
-  // Verificăm MARO după ce am exclus roșul oficial.
-  const redDarkOrBurgundy =
-    (h<=18 || h>=342) &&
-    r>=70 &&
-    r>=g+18 &&
-    r>=b+18 &&
-    l<=0.72;
-
-  const brownOrangeFamily =
-    h>=12 && h<=42 &&
-    r>=65 &&
-    g>=18 &&
-    b<=130 &&
-    r>=g+15 &&
-    l<=0.68;
-
-  const knownBrown =
-    (r>=70 && r<=170 && g>=20 && g<=105 && b<=80 && r>=g && g>=b) ||
-    (r>=80 && r<=190 && g>=35 && g<=130 && b>=15 && b<=95 && r>g && g>=b);
-
-  if(redDarkOrBurgundy || brownOrangeFamily || knownBrown)return'brown';
+  if(darkBrownGooglePalette.some(target=>isNear(c,target,24)))return'brown';
 
   return'active';
 }

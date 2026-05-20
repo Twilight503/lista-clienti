@@ -59,3 +59,7 @@ Regula curentă:
 - ROȘU = doar roșul aprins oficial `#ff0000`.
 - MARO = doar nuanțele închise folosite ca maro: roșu închis/bordo/maro-roșcat/brun/cafeniu închis.
 - Portocaliu aprins `#ff9900`, galben, magenta, verde, albastru, cyan, gri, alb, negru = ACTIV.
+
+## Logo / favicon
+
+Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.

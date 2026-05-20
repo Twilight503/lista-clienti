@@ -885,7 +885,8 @@ function parseCssColorToRgb(color){
     return {
       r:Math.max(0,Math.min(255,Number(rgb[1]))),
       g:Math.max(0,Math.min(255,Number(rgb[2]))),
-      b:Math.max(0,Math.min(255,Number(rgb[3])))
+      b:Math.max(0,Math.min(255,Number(rgb[3]))),
+      raw
     };
   }
 
@@ -896,12 +897,13 @@ function parseCssColorToRgb(color){
     return {
       r:parseInt(h.slice(0,2),16),
       g:parseInt(h.slice(2,4),16),
-      b:parseInt(h.slice(4,6),16)
+      b:parseInt(h.slice(4,6),16),
+      raw:'#'+h
     };
   }
 
-  if(raw.includes('red'))return{r:255,g:0,b:0};
-  if(raw.includes('brown'))return{r:120,g:63,b:4};
+  if(raw.includes('red'))return{r:255,g:0,b:0,raw};
+  if(raw.includes('brown'))return{r:120,g:63,b:4,raw};
 
   return null;
 }
@@ -923,6 +925,12 @@ function rgbToHsl(r,g,b){
   return{h,s,l};
 }
 
+function isExactUsedRed(c){
+  // Singurul roșu oficial folosit în Sheet.
+  // Punem toleranță mică pentru exporturi browser/Sheets.
+  return c.r>=245 && c.g<=12 && c.b<=12;
+}
+
 function statusFromColor(color){
   const c=parseCssColorToRgb(color);
   if(!c)return'active';
@@ -933,26 +941,39 @@ function statusFromColor(color){
   // Alb, gri, negru sau culori foarte șterse = ACTIV.
   if(s<0.18)return'active';
 
-  // ROȘU Google Sheets: roșu aprins, roșu închis, vișiniu.
-  // Evită roz/magenta, pentru că în Sheet poate fi folosit ca alt cod.
-  const isRedFamily =
-    ((h<=14 || h>=346) && r>=90 && r>=g+30 && r>=b+30) ||
-    (r>=150 && g<=75 && b<=75);
+  // IMPORTANT:
+  // ROȘU se detectează DOAR pentru roșul oficial folosit de noi (#ff0000 / aproape identic).
+  // Orice roșu închis, vișiniu, bordo, maro-roșcat etc. intră la MARO.
+  if(isExactUsedRed(c))return'red';
 
-  if(isRedFamily)return'red';
+  // Nu confundăm magenta/roz neon, galben, verde, albastru, cyan cu MARO.
+  const isMagentaOrPink = h>=285 && h<=340 && r>=150 && b>=120;
+  const isYellow = h>=48 && h<=70 && r>=170 && g>=140;
+  const isGreenBlueCyan = h>=70 && h<=250;
+  if(isMagentaOrPink || isYellow || isGreenBlueCyan)return'active';
 
-  // MARO Google Sheets: brun/cafeniu/mahon/maro închis.
-  // Evită portocaliu aprins și galben, care rămân ACTIV.
-  const isBrightOrangeOrYellow = r>=210 && g>=95 && h>=25 && h<=60;
-  const isBrownFamily =
-    !isBrightOrangeOrYellow &&
-    h>=12 && h<=38 &&
-    r>=70 && r<=205 &&
-    g>=20 && g<=145 &&
-    b<=115 &&
-    l>=0.10 && l<=0.55;
+  // MARO = maro/brun/cafeniu/mahon + roșu închis/vișiniu/bordo.
+  // Verificăm MARO după ce am exclus roșul oficial.
+  const redDarkOrBurgundy =
+    (h<=18 || h>=342) &&
+    r>=70 &&
+    r>=g+18 &&
+    r>=b+18 &&
+    l<=0.72;
 
-  if(isBrownFamily)return'brown';
+  const brownOrangeFamily =
+    h>=12 && h<=42 &&
+    r>=65 &&
+    g>=18 &&
+    b<=130 &&
+    r>=g+15 &&
+    l<=0.68;
+
+  const knownBrown =
+    (r>=70 && r<=170 && g>=20 && g<=105 && b<=80 && r>=g && g>=b) ||
+    (r>=80 && r<=190 && g>=35 && g<=130 && b>=15 && b<=95 && r>g && g>=b);
+
+  if(redDarkOrBurgundy || brownOrangeFamily || knownBrown)return'brown';
 
   return'active';
 }

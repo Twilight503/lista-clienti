@@ -45,3 +45,10 @@ Detectează familii de culoare:
 - roșu / roșu închis / vișiniu => ROȘU
 - maro / brun / cafeniu / mahon => MARO
 - galben, verde, albastru, cyan, magenta, portocaliu aprins, gri, alb, negru => ACTIV
+
+## Fix detectare roșu/maro
+
+Regulă nouă:
+- ROȘU este doar roșul oficial folosit în Google Sheets: `#ff0000` / aproape identic.
+- Roșu închis, vișiniu, bordo, maro-roșcat, brun, cafeniu, mahon => MARO.
+- Magenta/roz neon, galben, verde, albastru, cyan, gri, alb, negru => ACTIV.

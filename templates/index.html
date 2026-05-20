@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Verificare Clienți</title>
+<title>Verificare Clienți - SAFE</title>
 <style>
 :root{
   --bg:#f4f6f8;--card:#fff;--text:#172033;--muted:#667085;--border:#d9dee7;
@@ -34,11 +34,11 @@ button{border:0;border-radius:12px;padding:11px 14px;font-size:14px;font-weight:
 button:hover{background:var(--blue2);transform:translateY(-1px)}
 .green{background:var(--green)}.red{background:var(--red)}.brown{background:var(--brown)}.orange{background:var(--orange)}.purple{background:var(--purple)}.secondary{background:#475467}.ghost{background:#eef2ff;color:#1e3a8a}.small{padding:8px 10px;font-size:12px;border-radius:10px}
 .hidden{display:none!important}
-.stats{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;margin-bottom:14px}
+.stats{display:grid;grid-template-columns:repeat(9,1fr);gap:10px;margin-bottom:14px}
 @media(max-width:1000px){.stats{grid-template-columns:repeat(2,1fr)}}
 .stat{background:#f8fafc;border:1px solid var(--border);border-radius:16px;padding:12px}.stat strong{display:block;font-size:23px}.stat span{color:var(--muted);font-size:12px;font-weight:800}
 .pill{display:inline-flex;align-items:center;padding:5px 10px;border-radius:999px;font-size:12px;font-weight:900;background:#eef2ff;color:#1e3a8a;margin:2px}
-.pill.gray{background:#f2f4f7;color:#475467}.pill.green{background:#dcfce7;color:#166534}.pill.red{background:#fee2e2;color:#991b1b}.pill.brown{background:#f3e6d7;color:#6b3f18}.pill.black{background:#e2e8f0;color:#0f172a}.pill.purple{background:#ede9fe;color:#5b21b6}.pill.orange{background:#ffedd5;color:#9a3412}.pill.exhausted{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
+.pill.gray{background:#f2f4f7;color:#475467}.pill.green{background:#dcfce7;color:#166534}.pill.red{background:#fee2e2;color:#991b1b}.pill.brown{background:#f3e6d7;color:#6b3f18}.pill.black{background:#e2e8f0;color:#0f172a}.pill.purple{background:#ede9fe;color:#5b21b6}.pill.safe{background:#e0e7ff;color:#3730a3}.pill.orange{background:#ffedd5;color:#9a3412}.pill.exhausted{background:#fef3c7;color:#92400e;border:1px solid #f59e0b}
 .notice{padding:12px;border-radius:14px;border:1px solid var(--border);background:#f8fafc;color:#344054;line-height:1.45;margin:10px 0}
 .notice.ok{background:#ecfdf3;border-color:#bbf7d0;color:#166534}.notice.warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.notice.bad{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .scroll{overflow:auto;max-height:610px;border:1px solid var(--border);border-radius:14px}
@@ -156,6 +156,7 @@ body.modal-open{overflow:hidden}
         <option value="brown">MARO</option>
         <option value="red">ROȘU</option>
         <option value="missing">DISPĂRUT</option>
+        <option value="safe">SAFE</option>
         <option value="conflict">CONFLICT</option>
       </select>
       <select id="fEmp" onchange="render()"></select>
@@ -353,6 +354,7 @@ body.modal-open{overflow:hidden}
             <option value="set_brown">Setează MARO la agent</option>
             <option value="set_red">Setează ROȘU la agent</option>
             <option value="set_missing">Setează DISPĂRUT la agent</option>
+            <option value="set_safe">Setează SAFE la agent</option>
             <option value="add_history">Adaugă doar notă în istoric</option>
           </select>
           <label>Motiv / feedback</label>
@@ -445,7 +447,7 @@ function normalizeDb(data){
   });
   return data;
 }
-function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing'].includes(s)?s:'active'}
+function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing','safe'].includes(s)?s:'active'}
 let stateRev = window.__INITIAL_REV__ || 0;
 let saveTimer = null;
 let isSaving = false;
@@ -539,11 +541,11 @@ function phoneInText(text){
 function clean(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
 function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;")}
 function empName(idv){const e=db.employees.find(x=>x.id===idv);if(e)return e.name+(e.deleted?' (șters)':'');return db.deletedEmployeeNames?.[idv]?db.deletedEmployeeNames[idv]+' (șters definitiv)':'Agent necunoscut'}
-function stxt(s){return s==='brown'?'MARO':s==='red'?'ROSU':s==='missing'?'DISPARUT':'ACTIV'}
-function label(s){if(s==='brown')return'<span class="pill brown">MARO</span>';if(s==='red')return'<span class="pill red">ROȘU</span>';if(s==='missing')return'<span class="pill black">DISPĂRUT</span>';return'<span class="pill green">ACTIV</span>'}
+function stxt(s){return s==='brown'?'MARO':s==='red'?'ROSU':s==='missing'?'DISPARUT':s==='safe'?'SAFE':'ACTIV'}
+function label(s){if(s==='brown')return'<span class="pill brown">MARO</span>';if(s==='red')return'<span class="pill red">ROȘU</span>';if(s==='missing')return'<span class="pill black">DISPĂRUT</span>';if(s==='safe')return'<span class="pill safe">SAFE</span>';return'<span class="pill green">ACTIV</span>'}
 function clientByPhone(phone){return db.clients.find(c=>norm(c.phone)===norm(phone))}
 function activeAssignments(c){return (c?.assignments||[]).filter(a=>!a.transferredAt)}
-function expectedInSheetAssignments(c){return activeAssignments(c).filter(a=>a.inSheet!==false)}
+function expectedInSheetAssignments(c){return activeAssignments(c).filter(a=>a.inSheet!==false && a.status!=='safe')}
 function assignmentOf(client,agentId){return activeAssignments(client).find(a=>a.agentId===agentId)}
 function assignmentOfAny(client,agentId){return client?.assignments?.find(a=>a.agentId===agentId)}
 function hasEverBeenTo(client,agentId){return (client?.assignments||[]).some(a=>a.agentId===agentId)}
@@ -583,7 +585,7 @@ function activeAtMultipleAgents(c){
   return activeAssignments(c).filter(a=>a.status==='active').length>1;
 }
 function clientAgentsHtml(c){
-  const active=activeAssignments(c).map(a=>`<span class="pill ${a.status==='brown'?'brown':a.status==='red'?'red':a.status==='missing'?'black':'green'}">${esc(empName(a.agentId))}: ${stxt(a.status)}${a.inSheet===false?' / scos':''}${isBrownExhausted(c,a)?' / EPUIZAT':''}</span>`);
+  const active=activeAssignments(c).map(a=>`<span class="pill ${a.status==='brown'?'brown':a.status==='red'?'red':a.status==='missing'?'black':a.status==='safe'?'safe':'green'}">${esc(empName(a.agentId))}: ${stxt(a.status)}${a.status==='safe'?' / protejat':a.inSheet===false?' / scos':''}${isBrownExhausted(c,a)?' / EPUIZAT':''}</span>`);
   const hist=(c.assignments||[]).filter(a=>a.transferredAt).map(a=>`<span class="pill gray">${esc(empName(a.agentId))}: ${stxt(a.status)} / transferat</span>`);
   return active.concat(hist).join(' ');
 }
@@ -609,11 +611,11 @@ function renderStats(){
   const unique=db.clients.length;
   const apps=db.clients.flatMap(c=>activeAssignments(c));
   const inSheet=apps.filter(a=>a.inSheet!==false).length;
-  const active=apps.filter(a=>a.status==='active').length,brown=apps.filter(a=>a.status==='brown').length,red=apps.filter(a=>a.status==='red').length,missing=apps.filter(a=>a.status==='missing').length;
+  const active=apps.filter(a=>a.status==='active').length,brown=apps.filter(a=>a.status==='brown').length,red=apps.filter(a=>a.status==='red').length,missing=apps.filter(a=>a.status==='missing').length,safe=apps.filter(a=>a.status==='safe').length;
   const conflicts=db.clients.filter(clientHasConflict).length;
   const verify=apps.filter(a=>['brown','red','missing'].includes(a.status)).length+conflicts;
   el('stats').innerHTML=[
-    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['CONFLICTE',conflicts],['Verificare',verify]
+    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
   ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');
 }
 function renderAgents(){
@@ -786,6 +788,7 @@ function applyPartialAdd(){
       addedClients++;
     }
     let as=assignmentOf(c,agentId);
+    if(as && as.status==='safe'){updated++;return}
     if(!as){
       as={id:uid('as'),agentId,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[{date:now(),text:`Adăugat parțial cu status ${stxt(r.status)}.`}]};
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
@@ -799,7 +802,7 @@ function applyPartialAdd(){
       as.lastVerifiedAt=new Date().toISOString();
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();else{delete as.removedFromSheetAt;delete as.missingAt}
       if(old!==as.status||oldSheet!==as.inSheet){
-        as.history.push({date:now(),text:`Update parțial: ${stxt(old)} → ${stxt(as.status)}. ${as.inSheet?'În Sheet.':'Scos din Sheet.'}`});
+        as.history.push({date:now(),text:`Update parțial: ${stxt(old)} → ${stxt(as.status)}. ${newStatus==='safe'?'Protejat de audit.':as.inSheet?'În Sheet.':'Scos din Sheet.'}`});
         c.history.push({date:now(),text:`La ${empName(agentId)} update parțial: ${stxt(old)} → ${stxt(as.status)}.`});
         changed++;
       }
@@ -873,10 +876,84 @@ function colorToRgb(c){
 }
 function isWhiteLike(c){const rgb=colorToRgb(c);return rgb?rgb.r>245&&rgb.g>245&&rgb.b>245:false}
 function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0,l=(max+min)/2;if(max!==min){const d=max-min;s=l>.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h*=60}return{h,s,l}}
+function parseCssColorToRgb(color){
+  const raw=String(color||'').trim().toLowerCase();
+  if(!raw)return null;
+
+  const rgb=raw.match(/rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})/);
+  if(rgb){
+    return {
+      r:Math.max(0,Math.min(255,Number(rgb[1]))),
+      g:Math.max(0,Math.min(255,Number(rgb[2]))),
+      b:Math.max(0,Math.min(255,Number(rgb[3])))
+    };
+  }
+
+  const hex=raw.match(/#([0-9a-f]{3}|[0-9a-f]{6})\b/i);
+  if(hex){
+    let h=hex[1];
+    if(h.length===3)h=h.split('').map(x=>x+x).join('');
+    return {
+      r:parseInt(h.slice(0,2),16),
+      g:parseInt(h.slice(2,4),16),
+      b:parseInt(h.slice(4,6),16)
+    };
+  }
+
+  if(raw.includes('red'))return{r:255,g:0,b:0};
+  if(raw.includes('brown'))return{r:120,g:63,b:4};
+
+  return null;
+}
+
+function rgbToHsl(r,g,b){
+  r/=255;g/=255;b/=255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b);
+  let h=0,s=0,l=(max+min)/2;
+  if(max!==min){
+    const d=max-min;
+    s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){
+      case r:h=(g-b)/d+(g<b?6:0);break;
+      case g:h=(b-r)/d+2;break;
+      case b:h=(r-g)/d+4;break;
+    }
+    h*=60;
+  }
+  return{h,s,l};
+}
+
 function statusFromColor(color){
-  const raw=String(color||'').trim().toLowerCase().replace(/\s+/g,'');
-  if(raw.includes('#ff0000')||raw.includes('rgb(255,0,0)'))return'red';
-  if(raw.includes('#5b0f00')||raw.includes('rgb(91,15,0)'))return'brown';
+  const c=parseCssColorToRgb(color);
+  if(!c)return'active';
+
+  const {r,g,b}=c;
+  const {h,s,l}=rgbToHsl(r,g,b);
+
+  // Alb, gri, negru sau culori foarte șterse = ACTIV.
+  if(s<0.18)return'active';
+
+  // ROȘU Google Sheets: roșu aprins, roșu închis, vișiniu.
+  // Evită roz/magenta, pentru că în Sheet poate fi folosit ca alt cod.
+  const isRedFamily =
+    ((h<=14 || h>=346) && r>=90 && r>=g+30 && r>=b+30) ||
+    (r>=150 && g<=75 && b<=75);
+
+  if(isRedFamily)return'red';
+
+  // MARO Google Sheets: brun/cafeniu/mahon/maro închis.
+  // Evită portocaliu aprins și galben, care rămân ACTIV.
+  const isBrightOrangeOrYellow = r>=210 && g>=95 && h>=25 && h<=60;
+  const isBrownFamily =
+    !isBrightOrangeOrYellow &&
+    h>=12 && h<=38 &&
+    r>=70 && r<=205 &&
+    g>=20 && g<=145 &&
+    b<=115 &&
+    l>=0.10 && l<=0.55;
+
+  if(isBrownFamily)return'brown';
+
   return'active';
 }
 
@@ -913,7 +990,8 @@ function analyzeFullAudit(rows){
     if(!detected)return;
     const as=assignmentOf(x.client,detected);
     if(as){
-      if(as.status!==x.status || (x.status==='active' && as.inSheet===false) || (x.status!=='active' && as.inSheet!==false))changed++;
+      if(as.status==='safe') unchanged++;
+      else if(as.status!==x.status || (x.status==='active' && as.inSheet===false) || (x.status!=='active' && as.inSheet!==false))changed++;
       else unchanged++;
     }else{
       willAddAssignment++;
@@ -1011,6 +1089,7 @@ function applyFullAudit(){
     let c=clientByPhone(r.phone);
     if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din audit listă',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
     let as=assignmentOf(c,a.detected);
+    if(as && as.status==='safe'){updated++;return}
     if(!as){
       as={id:uid('as'),agentId:a.detected,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
@@ -1083,7 +1162,7 @@ function renderClientModal(){
       <td>${esc(empName(a.agentId))}</td>
       <td>${label(a.status)}</td>
       <td>
-        ${a.transferredAt?'<span class="pill gray">transferat</span>':a.inSheet===false?'<span class="pill orange">scos din Sheet</span>':'<span class="pill green">în Sheet</span>'}
+        ${a.transferredAt?'<span class="pill gray">transferat</span>':a.status==='safe'?'<span class="pill safe">protejat de audit</span>':a.inSheet===false?'<span class="pill orange">scos din Sheet</span>':'<span class="pill green">în Sheet</span>'}
         ${a.transferredToAgentId?`<div class="muted">către ${esc(empName(a.transferredToAgentId))}</div>`:''}
       </td>
       <td><button class="small red" onclick="deleteAssignmentFromModal('${a.id}')">Șterge apariția</button></td>
@@ -1119,7 +1198,7 @@ function applyManualAction(){
     el('modalManualNote').value='';
     save();renderClientModal();return;
   }
-  const statusMap={set_active:'active',set_brown:'brown',set_red:'red',set_missing:'missing'};
+  const statusMap={set_active:'active',set_brown:'brown',set_red:'red',set_missing:'missing',set_safe:'safe'};
   const newStatus=statusMap[action];
   if(!newStatus)return;
   let as=assignmentOf(c,agentId);
@@ -1132,8 +1211,8 @@ function applyManualAction(){
     as.status=newStatus;
     as.inSheet=newStatus==='active';
     as.lastVerifiedAt=new Date().toISOString();
-    if(newStatus==='active'){delete as.removedFromSheetAt;delete as.missingAt}else as.removedFromSheetAt=new Date().toISOString();
-    as.history.push({date:now(),text:`Modificare manuală: ${stxt(old)} → ${stxt(newStatus)}. ${as.inSheet?'În Sheet.':'Scos din Sheet.'} ${note?`Motiv: ${note}`:''}`});
+    if(newStatus==='active'||newStatus==='safe'){delete as.removedFromSheetAt;delete as.missingAt}else as.removedFromSheetAt=new Date().toISOString();
+    as.history.push({date:now(),text:`Modificare manuală: ${stxt(old)} → ${stxt(newStatus)}. ${newStatus==='safe'?'Protejat de audit.':as.inSheet?'În Sheet.':'Scos din Sheet.'} ${note?`Motiv: ${note}`:''}`});
     c.history.push({date:now(),text:`Manual la ${empName(agentId)}: ${stxt(old)} → ${stxt(newStatus)}. ${note?`Motiv: ${note}`:''}`});
   }
   el('modalManualNote').value='';

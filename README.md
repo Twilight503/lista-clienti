@@ -33,3 +33,15 @@ După deploy:
 - Backup-urile automate sunt limitate la ultimele 3 copii complete.
 - Există protecție `_rev` ca două persoane să nu suprascrie baza simultan.
 - Feedback-ul autosalvat folosește debounce în frontend.
+
+## SAFE
+
+Statusul SAFE se setează din Edit / Istoric → Acțiune manuală. SAFE este ignorat de Audit listă, nu intră la Transfer MARO și rămâne până este schimbat manual sau șters.
+
+## Detectare culori Google Sheets
+
+Importul colorat nu mai verifică doar `#ff0000` și `#5b0f00`.
+Detectează familii de culoare:
+- roșu / roșu închis / vișiniu => ROȘU
+- maro / brun / cafeniu / mahon => MARO
+- galben, verde, albastru, cyan, magenta, portocaliu aprins, gri, alb, negru => ACTIV

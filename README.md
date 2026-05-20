@@ -1,9 +1,6 @@
 # Verificare Clienți - Render + MongoDB
 
-Aplicația salvează baza în MongoDB, în:
-- DB_NAME=test
-- COLLECTION_NAME=Clienti maro/rosu
-- document _id=state
+Aplicația salvează baza în MongoDB, nu în localStorage.
 
 ## Environment Variables pe Render
 
@@ -13,17 +10,26 @@ COLLECTION_NAME=Clienti maro/rosu
 APP_PASSWORD=parola cu care intri pe site
 SECRET_KEY=un text lung/random
 
-## Start command
+## Deploy pe Render
 
+Build Command:
+pip install -r requirements.txt
+
+Start Command:
 gunicorn app:app
 
-## Local test Windows
+## Import backup
 
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-set MONGO_URI=URI_UL_TAU
-set DB_NAME=test
-set COLLECTION_NAME=Clienti maro/rosu
-set APP_PASSWORD=parola-ta
-python app.py
+După deploy:
+1. intri pe site cu parola
+2. mergi la Backup
+3. Importă backup JSON
+4. poți importa backup_compatibil_local_usor.json sau backup-ul exportat din aplicație
+
+
+## Optimizare Mongo inclusă
+
+- Ștergerile sunt definitive; `deletedRecords` este golit automat.
+- Backup-urile automate sunt limitate la ultimele 3 copii complete.
+- Există protecție `_rev` ca două persoane să nu suprascrie baza simultan.
+- Feedback-ul autosalvat folosește debounce în frontend.

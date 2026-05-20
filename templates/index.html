@@ -58,16 +58,72 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 .details-box{margin-top:12px}.details-box summary{cursor:pointer;font-weight:900;color:#475467;padding:10px 0}
 #importInputBox,#importReportBox{max-height:690px;overflow:auto;padding-right:6px}
 .feedback{min-height:68px;font-family:Arial,sans-serif}.counter{display:inline-flex;align-items:center;gap:8px}.counter strong{font-size:18px}.transfer-batch{border:1px solid var(--border);border-radius:16px;padding:12px;margin-bottom:10px;background:#fff}.transfer-batch h3{margin:0 0 8px}.transfer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+
+/* Popup real pentru edit / istoric */
+body.modal-open{overflow:hidden}
+.modal-backdrop{
+  position:fixed;
+  inset:0;
+  z-index:99999;
+  background:rgba(15,23,42,.62);
+  display:flex;
+  align-items:flex-start;
+  justify-content:center;
+  padding:32px 16px;
+  overflow:auto;
+}
+.modal-backdrop.hidden{display:none!important}
+.modal{
+  width:min(1120px,100%);
+  background:#fff;
+  border:1px solid var(--border);
+  border-radius:24px;
+  box-shadow:0 30px 90px rgba(15,23,42,.35);
+  padding:18px;
+  margin:auto 0;
+}
+.modal-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  border-bottom:1px solid var(--border);
+  padding-bottom:12px;
+  margin-bottom:12px;
+}
+.modal-title{font-size:22px;font-weight:1000;margin:0;letter-spacing:-.04em}
+.modal-close{background:#e5e7eb!important;color:#111827!important}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.modal-grid{grid-template-columns:1fr}.modal{margin:0}}
+.timeline{max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:14px;padding:10px;background:#f8fafc}
+.timeline-item{padding:8px 0;border-bottom:1px solid #e5e7eb}
+.timeline-item:last-child{border-bottom:0}
+
+
+
+.backup-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--border);padding:8px 0}
+.backup-row:last-child{border-bottom:0}
+
+
+.verify-agent-block{border-bottom:1px solid #e5e7eb;padding:6px 0}
+.verify-agent-block:last-child{border-bottom:0}
+.verify-counter{display:flex;align-items:center;gap:8px;white-space:nowrap;margin:3px 0 8px}
+.verify-counter strong{font-size:18px;min-width:18px;text-align:center}
+.feedback-mini{min-height:58px;font-family:Arial,sans-serif;font-size:13px;padding:8px 10px}
+
+
+.tabs{margin-top:-6px}
+.card h2{letter-spacing:-.025em}
+.tab{box-shadow:0 6px 16px rgba(16,24,40,.04)}
+
 </style>
 </head>
 <body>
 <header>
-  <div class="header-inner">
-    <div class="logo-mark">VC</div>
-    <div>
-      <h1 class="brand-title">Verificare Clienți</h1>
-      <p class="brand-subtitle">Import complet din Google Sheets, audit automat pentru numere dispărute, verificare, transfer MARO și istoric pe agenți.</p>
-    </div>
+  <div class="brand-wrap">
+    <div class="brand-kicker">VC</div>
+    <h1 class="brand-title">Verificare Clienți</h1>
+    <p class="subtitle">Import complet din Google Sheets, audit automat pentru numere dispărute, verificare, transfer MARO și istoric pe agenți.</p>
   </div>
 </header>
 
@@ -76,7 +132,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
   <button class="tab active" data-tab="dash">Dashboard</button>
   <button class="tab" data-tab="agents">Agenți</button>
   <button class="tab" data-tab="add">Adaugă numere</button>
-  <button class="tab" data-tab="return">Import listă completă</button>
+  <button class="tab" data-tab="return">Audit listă</button>
   <button class="tab" data-tab="verify">Verificare</button>
   <button class="tab" data-tab="transfer">Transfer MARO</button>
   <button class="tab" data-tab="transferHistory">Istoric transferuri</button>
@@ -84,10 +140,14 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
   <button class="tab" onclick="location.href=\'/logout\'" type="button">Logout</button>
 </div>
 
+
+
 <section id="tab-dash">
   <div id="stats" class="stats"></div>
+
+
   <div class="card c12">
-    <h2>Baza mare</h2>
+    <h2>Toate numerele</h2>
     <div class="row">
       <input id="q" placeholder="Caută telefon, agent, status, notă..." oninput="render()">
       <select id="fStatus" onchange="render()">
@@ -102,7 +162,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
     </div>
     <div class="scroll">
       <table>
-        <thead><tr><th>Telefon</th><th>Notă</th><th>Apariții la agenți</th><th>Verificare</th><th>Istoric</th></tr></thead>
+        <thead><tr><th>Telefon</th><th>Notă</th><th>Apariții la agenți</th><th>Verificare</th><th>Istoric</th><th>Acțiuni</th></tr></thead>
         <tbody id="clientsTable"></tbody>
       </table>
     </div>
@@ -132,20 +192,34 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 <section id="tab-add" class="hidden">
   <div class="grid">
     <div class="card c5">
-      <h2>Adaugă numere</h2>
+      <h2>Adaugă / actualizează numere</h2>
+      <div class="notice warn">Lipești unul sau mai multe numere. Culorile se citesc automat, dar aici nu se marchează nimic ca DISPĂRUT.</div>
       <label>Agent</label><select id="assignEmp"></select>
-      <label>Telefon + notă opțională</label>
-      <textarea id="inputClients" placeholder="728319539-client nou&#10;447911123456 client UK&#10;004917612345678 client DE"></textarea>
-      <div class="row"><button onclick="addClients()">Salvează</button><button class="secondary" onclick="el('inputClients').value=''">Curăță</button></div>
+      <label>Zonă paste colorată</label>
+      <div id="addPasteBox" class="pastebox" contenteditable="true" data-placeholder="Click aici și dă Ctrl+V cu numere colorate sau necolorate..."></div>
+      <div class="row">
+        <button class="orange" onclick="processAddPasteBox()">Analizează</button>
+        <button class="secondary" onclick="clearAddPasteBox()">Curăță</button>
+      </div>
+      <h3>Text simplu</h3>
+      <textarea id="inputClients" placeholder="728319539 activ&#10;447911123456 maro&#10;004917612345678 rosu"></textarea>
+      <button class="ghost" onclick="processAddPlainText()">Analizează text simplu</button>
     </div>
-    <div class="card c7"><h2>Raport</h2><div id="entryReport" class="notice">Încă nu ai adăugat numere.</div></div>
+    <div class="card c7">
+      <h2>Raport adăugare / actualizare</h2>
+      <div id="entryReport" class="notice">Încă nu ai adăugat numere.</div>
+      <h3>Ce a citit</h3>
+      <div class="scroll" style="max-height:260px">
+        <table><thead><tr><th>Telefon</th><th>Status</th><th>Culoare</th><th>Existent</th></tr></thead><tbody id="addParsedPreview"></tbody></table>
+      </div>
+    </div>
   </div>
 </section>
 
 <section id="tab-return" class="hidden">
   <div class="grid">
     <div class="card c5" id="importInputBox">
-      <h2>Import listă completă din Sheet</h2>
+      <h2>Audit listă din Sheet</h2>
       <div class="notice warn">Lipește toată lista agentului din Sheet. Alb/normal = ACTIV, maro = MARO, roșu = ROȘU. Ce lipsește dar trebuia să fie în Sheet devine DISPĂRUT.</div>
       <label>Agent sursă</label>
       <select id="manualImportAgent"></select>
@@ -158,7 +232,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
       <button class="ghost" onclick="processPlainText()">Analizează text simplu</button>
     </div>
     <div class="card c7">
-      <h2>Raport import</h2>
+      <h2>Raport audit</h2>
       <div id="importReportBox"><div id="retReport" class="notice">Încă nu ai importat nicio listă.</div></div>
       <h3>Ce a citit</h3>
       <div class="scroll" style="max-height:260px">
@@ -200,7 +274,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
     <div class="card c4">
       <h2>Transfer global MARO</h2>
       <label>Către agent</label><select id="trTo" onchange="renderTransfer()"></select>
-      <div class="notice warn">Afișez doar MARO eligibile pentru agentul ales. Cele deja existente la agentul destinație nu apar.</div>
+      <div class="notice warn">Apar doar numerele MARO eligibile, o singură dată per telefon.</div>
       <label>Selectare rapidă</label>
       <div class="row"><button class="small ghost" onclick="selectFirstTransfer(10)">10</button><button class="small ghost" onclick="selectFirstTransfer(20)">20</button><button class="small ghost" onclick="selectFirstTransfer(50)">50</button></div>
       <div class="row"><input id="transferCount" type="number" min="1" placeholder="Ex: 15"><button class="small secondary" onclick="selectFirstTransferFromInput()">Primele X</button></div>
@@ -210,7 +284,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
     <div class="card c8">
       <h2>MARO eligibile</h2><div id="trInfo" class="notice"></div>
       <div class="scroll">
-        <table><thead><tr><th><input type="checkbox" onchange="toggleAll(this.checked)"></th><th>Telefon</th><th>Notă</th><th>Vine de la</th><th>A mai fost la</th></tr></thead><tbody id="trRows"></tbody></table>
+        <table><thead><tr><th><input type="checkbox" onchange="toggleAll(this.checked)"></th><th>Telefon</th><th>Notă</th><th>A mai fost la</th></tr></thead><tbody id="trRows"></tbody></table>
       </div>
     </div>
   </div>
@@ -237,28 +311,94 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
   <div class="grid">
     <div class="card c6">
       <h2>Backup</h2>
-      <div class="row"><button onclick="exportDb()">Descarcă JSON</button><button class="secondary" onclick="copyDb()">Copiază JSON</button></div>
+      <div class="row"><button onclick="exportDb()">Descarcă backup</button><button class="secondary" onclick="copyDb()">Copiază backup</button></div>
       <label class="file">Importă backup JSON<input type="file" accept=".json,application/json" onchange="importDbFile(event)"></label>
       <h3>Undo</h3><div id="backupInfo" class="notice">Încă nu există backup automat.</div><button class="orange" onclick="restoreLastBackup()">Revino la ultimul backup</button>
     </div>
     <div class="card c6">
       <h2>Reset</h2><button class="red" onclick="resetDb()">Resetează baza locală</button>
-      <h3>Preview JSON</h3><div id="preview" class="mono"></div>
+      <h3>JSON curent</h3><div id="preview" class="mono"></div>
     </div>
   </div>
 </section>
+
+<div id="clientModalBackdrop" class="modal-backdrop hidden">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <h2 class="modal-title" id="modalTitle">Edit client</h2>
+        <div class="muted" id="modalSubtitle"></div>
+      </div>
+      <button class="modal-close" onclick="closeClientModal()">Închide</button>
+    </div>
+
+    <div class="modal-grid">
+      <div>
+        <div class="card" style="box-shadow:none">
+          <h2>Date client</h2>
+          <label>Telefon</label>
+          <input id="modalPhone" disabled>
+          <label>Notă</label>
+          <textarea id="modalNote" style="min-height:80px;font-family:Arial,sans-serif"></textarea>
+          <button class="green" onclick="saveClientNote()">Salvează nota</button>
+        </div>
+
+        <div class="card" style="box-shadow:none;margin-top:12px">
+          <h2>Acțiune manuală</h2>
+          <label>Agent</label>
+          <select id="modalAgent"></select>
+          <label>Ce s-a întâmplat?</label>
+          <select id="modalAction">
+            <option value="set_active">Setează ACTIV la agent</option>
+            <option value="set_brown">Setează MARO la agent</option>
+            <option value="set_red">Setează ROȘU la agent</option>
+            <option value="set_missing">Setează DISPĂRUT la agent</option>
+            <option value="add_history">Adaugă doar notă în istoric</option>
+          </select>
+          <label>Motiv / feedback</label>
+          <textarea id="modalManualNote" style="min-height:90px;font-family:Arial,sans-serif" placeholder="Ex: clientul a revenit, îl lucrez eu acum"></textarea>
+          <button onclick="applyManualAction()">Salvează acțiunea</button>
+          <button class="red" onclick="archiveClientFromModal()" style="margin-top:8px">Șterge peste tot</button>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="box-shadow:none">
+          <h2>Apariții pe agenți</h2>
+          <div class="scroll" style="max-height:260px">
+            <table>
+              <thead><tr><th>Agent</th><th>Status</th><th>Stare</th><th>Acțiuni</th></tr></thead>
+              <tbody id="modalAssignments"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="box-shadow:none;margin-top:12px">
+          <h2>Pașii numărului / istoric</h2>
+          <div id="modalTimeline" class="timeline"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 </main>
 
 <script>
 window.__INITIAL_DB__ = {{ initial_db|tojson }};
 window.__INITIAL_REV__ = {{ rev|tojson }};
-const KEY='mongo_v12_audit_complet';
+const KEY='verificare_clienti_render';
 let db=loadDb();
 let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
+let lastAddHtmlPaste='', lastAddTextPaste='', pendingAdd=null, currentModalClientId=null;
 
 function el(id){return document.getElementById(id)}
 function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8)}
 function now(){return new Date().toLocaleString('ro-RO')}
+
+function actor(){return ''}
+function actorText(text){return text}
+
 function clone(x){return JSON.parse(JSON.stringify(x))}
 function copyTextToClipboard(text,msg){
   if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -275,16 +415,18 @@ function loadDb(){
   try{
     return normalizeDb(window.__INITIAL_DB__ || {});
   }catch(e){
+    console.error(e);
     alert('Nu am putut încărca baza din MongoDB.');
-    return {version:12,createdAt:new Date().toISOString(),employees:[],clients:[],deletedRecords:[],transfers:[],backups:[]};
+    return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[]};
   }
 }
 function normalizeDb(data){
   data.employees=data.employees||data.friends||[];
   data.clients=data.clients||[];
-  data.deletedRecords=data.deletedRecords||data.deletedClients||[];
+  data.deletedEmployeeNames=data.deletedEmployeeNames||{};
+  data.deletedRecords=[];
   data.transfers=data.transfers||[];
-  data.backups=data.backups||[];
+  data.backups=(data.backups||[]).slice(-3);
   data.clients=data.clients.map(c=>{
     if(Array.isArray(c.assignments)){
       c.assignments=c.assignments.map(a=>({noAnswerCount:0,feedback:'',history:[],inSheet:(a.status==='active' && !a.transferredAt),...a}));
@@ -307,6 +449,8 @@ function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['ac
 let stateRev = window.__INITIAL_REV__ || 0;
 let saveTimer = null;
 let isSaving = false;
+let dirtyWhileSaving = false;
+let booting = true;
 
 function save(){
   render();
@@ -318,14 +462,21 @@ function save(){
   schedulePersist();
 }
 
+function persistOnly(){
+  previewDb();
+  schedulePersist();
+}
+
 function schedulePersist(){
+  if(booting)return;
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(persistDb,250);
+  saveTimer=setTimeout(persistDb,650);
 }
 
 async function persistDb(){
-  if(isSaving)return;
+  if(isSaving){dirtyWhileSaving=true;return}
   isSaving=true;
+  dirtyWhileSaving=false;
   try{
     const res=await fetch('/api/state',{
       method:'POST',
@@ -333,7 +484,7 @@ async function persistDb(){
       body:JSON.stringify({db,rev:stateRev})
     });
     if(res.status===409){
-      alert('Baza a fost modificată de altcineva. Reîncarc pagina ca să nu suprascriem datele.');
+      alert('Baza a fost modificată de altcineva. Pagina se reîncarcă ca să nu suprascriem datele.');
       location.reload();
       return;
     }
@@ -342,9 +493,10 @@ async function persistDb(){
     stateRev=data.rev;
   }catch(e){
     console.error(e);
-    alert('Nu am putut salva în MongoDB. Verifică serverul sau conexiunea.');
+    alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
   }finally{
     isSaving=false;
+    if(dirtyWhileSaving)schedulePersist();
   }
 }
 function activeEmployees(){return db.employees.filter(e=>!e.deleted)}
@@ -386,7 +538,7 @@ function phoneInText(text){
 }
 function clean(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
 function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;")}
-function empName(idv){const e=db.employees.find(x=>x.id===idv);return e?e.name+(e.deleted?' (șters)':''):'Agent necunoscut'}
+function empName(idv){const e=db.employees.find(x=>x.id===idv);if(e)return e.name+(e.deleted?' (șters)':'');return db.deletedEmployeeNames?.[idv]?db.deletedEmployeeNames[idv]+' (șters definitiv)':'Agent necunoscut'}
 function stxt(s){return s==='brown'?'MARO':s==='red'?'ROSU':s==='missing'?'DISPARUT':'ACTIV'}
 function label(s){if(s==='brown')return'<span class="pill brown">MARO</span>';if(s==='red')return'<span class="pill red">ROȘU</span>';if(s==='missing')return'<span class="pill black">DISPĂRUT</span>';return'<span class="pill green">ACTIV</span>'}
 function clientByPhone(phone){return db.clients.find(c=>norm(c.phone)===norm(phone))}
@@ -405,6 +557,30 @@ function clientHasConflict(c){
   const active=activeAssignments(c);
   const statuses=active.map(a=>a.status);
   return active.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown');
+}
+function clientHasActiveElsewhere(c, sourceAgentId){
+  return activeAssignments(c).some(a=>a.agentId!==sourceAgentId && a.status==='active');
+}
+function activeElsewhereNames(c, sourceAgentId){
+  return activeAssignments(c).filter(a=>a.agentId!==sourceAgentId && a.status==='active').map(a=>empName(a.agentId)).join(', ');
+}
+function transferBlockReason(c){
+  const activeAs=activeAssignments(c);
+  const brown=activeAs.filter(a=>a.status==='brown');
+  if(!brown.length)return 'FĂRĂ MARO';
+  const bad=activeAs.filter(a=>a.status!=='brown');
+  if(bad.length)return 'ARE ' + bad.map(a=>`${empName(a.agentId)}=${stxt(a.status)}`).join(', ');
+  return '';
+}
+function isTransferEligibleTo(c,to){
+  return !transferBlockReason(c) && !hasEverBeenTo(c,to);
+}
+function hasRedAndBrown(c){
+  const s=activeAssignments(c).map(a=>a.status);
+  return s.includes('red') && s.includes('brown');
+}
+function activeAtMultipleAgents(c){
+  return activeAssignments(c).filter(a=>a.status==='active').length>1;
 }
 function clientAgentsHtml(c){
   const active=activeAssignments(c).map(a=>`<span class="pill ${a.status==='brown'?'brown':a.status==='red'?'red':a.status==='missing'?'black':'green'}">${esc(empName(a.agentId))}: ${stxt(a.status)}${a.inSheet===false?' / scos':''}${isBrownExhausted(c,a)?' / EPUIZAT':''}</span>`);
@@ -442,10 +618,24 @@ function renderStats(){
 }
 function renderAgents(){
   const active=activeEmployees();
-  el('empList').innerHTML=active.length?active.map(e=>`<span class="pill">${esc(e.name)}</span> <button class="small red" onclick="deleteEmp('${e.id}')">Șterge</button>`).join('<br>'):'Nu ai agenți.';
+  el('empList').innerHTML=active.length?active.map(e=>`
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:8px;border-bottom:1px solid var(--border)">
+      <span class="pill">${esc(e.name)}</span>
+      <button class="small ghost" onclick="renameEmp('${e.id}')">Redenumește</button>
+      <button class="small red" onclick="deleteEmp('${e.id}')">Șterge</button>
+    </div>
+  `).join(''):'Nu ai agenți activi.';
+
   const del=db.employees.filter(e=>e.deleted);
   el('deletedEmpList').classList.toggle('hidden',!del.length);
-  el('deletedEmpList').innerHTML=del.length?'<b>Agenți șterși:</b><br>'+del.map(e=>`<span class="pill gray">${esc(e.name)}</span> <button class="small green" onclick="restoreEmp('${e.id}')">Reactivează</button>`).join('<br>'):'';
+  el('deletedEmpList').innerHTML=del.length?'<b>Agenți șterși:</b><br>'+del.map(e=>`
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0;padding:8px;border-bottom:1px solid var(--border)">
+      <span class="pill gray">${esc(e.name)}</span>
+      <button class="small ghost" onclick="renameEmp('${e.id}')">Redenumește</button>
+      <button class="small green" onclick="restoreEmp('${e.id}')">Reactivează</button>
+      <button class="small red" onclick="deleteEmpForever('${e.id}')">Șterge definitiv</button>
+    </div>
+  `).join(''):'';
 }
 function renderEmployeeStats(){
   el('empStats').innerHTML=db.employees.length?db.employees.map(e=>{
@@ -466,8 +656,10 @@ function renderClientsTable(){
     <td>${clientAgentsHtml(c)}</td>
     <td>${clientHasConflict(c)?'<span class="pill purple">CONFLICT</span>':'—'}</td>
     <td>${(c.history||[]).slice(-4).map(h=>`<div class="muted">${esc(h.date)} — ${esc(h.text)}</div>`).join('')}</td>
-  </tr>`).join(''):'<tr><td colspan="5" class="muted">Nu există clienți.</td></tr>';
+    <td><button class="small" onclick="openClientModal('${c.id}')">Edit / Istoric</button></td>
+  </tr>`).join(''):'<tr><td colspan="6" class="muted">Nu există clienți.</td></tr>';
 }
+
 function addEmp(){
   const name=el('empName').value.trim();
   if(!name)return alert('Scrie numele agentului.');
@@ -476,8 +668,51 @@ function addEmp(){
   if(ex&&ex.deleted){ex.deleted=false;el('empName').value='';save();return}
   db.employees.push({id:uid('emp'),name,deleted:false});el('empName').value='';save();
 }
-function deleteEmp(idv){const e=db.employees.find(x=>x.id===idv);if(!e)return;if(!confirm(`Ștergi/ascunzi agentul ${e.name}? Istoricul rămâne.`))return;e.deleted=true;save()}
-function restoreEmp(idv){const e=db.employees.find(x=>x.id===idv);if(e){e.deleted=false;save()}}
+function renameEmp(idv){
+  const e=db.employees.find(x=>x.id===idv);
+  if(!e)return;
+  const name=prompt('Nume nou pentru agent:', e.name);
+  if(name===null)return;
+  const cleanName=name.trim();
+  if(!cleanName)return alert('Numele nu poate fi gol.');
+  const exists=db.employees.some(x=>x.id!==idv && !x.deleted && x.name.toLowerCase()===cleanName.toLowerCase());
+  if(exists)return alert('Există deja un agent activ cu acest nume.');
+  const old=e.name;
+  e.name=cleanName;
+  db.clients.forEach(c=>{
+    (c.assignments||[]).forEach(a=>{
+      if(a.agentId===idv){
+        a.history=a.history||[];
+        a.history.push({date:now(),text:`Agent redenumit: ${old} → ${cleanName}.`});
+      }
+    });
+  });
+  save();
+}
+function deleteEmp(idv){
+  const e=db.employees.find(x=>x.id===idv);
+  if(!e)return;
+  if(!confirm(`Ștergi/ascunzi agentul ${e.name}? Istoricul și aparițiile rămân.`))return;
+  e.deleted=true;
+  save();
+}
+function restoreEmp(idv){
+  const e=db.employees.find(x=>x.id===idv);
+  if(e){e.deleted=false;save()}
+}
+function deleteEmpForever(idv){
+  const e=db.employees.find(x=>x.id===idv);
+  if(!e)return;
+  const hasAssignments=db.clients.some(c=>(c.assignments||[]).some(a=>a.agentId===idv));
+  const msg=hasAssignments
+    ? `Agentul ${e.name} există în istoricul/aparițiile unor numere. Dacă îl ștergi definitiv, numele va rămâne doar ca text în istoric, dar nu va mai apărea la lista de agenți. Continui?`
+    : `Ștergi definitiv agentul ${e.name}?`;
+  if(!confirm(msg))return;
+  db.deletedEmployeeNames=db.deletedEmployeeNames||{};
+  db.deletedEmployeeNames[idv]=e.name;
+  db.employees=db.employees.filter(x=>x.id!==idv);
+  save();
+}
 
 function parseInputLines(text){
   const seen=new Set(),out=[];
@@ -489,31 +724,123 @@ function parseInputLines(text){
   return out;
 }
 function addClients(){
+  processAddPlainText();
+}
+function clearAddPasteBox(){
+  lastAddHtmlPaste='';
+  lastAddTextPaste='';
+  pendingAdd=null;
+  if(el('addPasteBox'))el('addPasteBox').innerHTML='';
+  if(el('inputClients'))el('inputClients').value='';
+  if(el('addParsedPreview'))el('addParsedPreview').innerHTML='';
+  if(el('entryReport'))el('entryReport').innerHTML='Încă nu ai adăugat numere.';
+}
+function processAddPasteBox(){
+  let rows=parseColoredHtml(lastAddHtmlPaste||el('addPasteBox')?.innerHTML||'');
+  if(!rows.length)rows=parsePlainRows(lastAddTextPaste||el('addPasteBox')?.innerText||'');
+  processAddRows(rows);
+}
+function processAddPlainText(){
+  processAddRows(parsePlainRows(el('inputClients')?.value||''));
+}
+function processAddRows(rows){
   const agentId=el('assignEmp')?.value||'';
   if(!agentId)return alert('Alege agentul.');
-  const parsed=parseInputLines(el('inputClients').value);
-  if(!parsed.length)return alert('Nu am găsit numere valide. Accept orice număr de 7-15 cifre.');
-  const added=[],addedDuplicate=[],same=[];
-  parsed.forEach(p=>{
-    let c=clientByPhone(p.phone);
+  if(!rows.length){
+    pendingAdd=null;
+    el('entryReport').className='notice bad';
+    el('entryReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';
+    return;
+  }
+  const active=rows.filter(x=>x.status==='active').length;
+  const brown=rows.filter(x=>x.status==='brown').length;
+  const red=rows.filter(x=>x.status==='red').length;
+  const newPhones=rows.filter(r=>!clientByPhone(r.phone)).length;
+  const existingAtAgent=rows.filter(r=>{const c=clientByPhone(r.phone);return c&&assignmentOf(c,agentId)}).length;
+  const newAssignments=rows.filter(r=>{const c=clientByPhone(r.phone);return c&&!assignmentOf(c,agentId)}).length;
+  pendingAdd={agentId,rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
+  renderAddParsedPreview(rows,agentId);
+  el('entryReport').className='notice';
+  el('entryReport').innerHTML=`<h3 style="margin-top:0">Preview adăugare / actualizare</h3>
+    <div class="notice ok">Agent: <b>${esc(empName(agentId))}</b></div>
+    ${summaryCards({active,brown,red,missing:0,newCount:newPhones+newAssignments,conflict:0})}
+    <div class="big-status ok">Aici nu se verifică dispăruți. Se modifică doar numerele lipite.</div>
+    <button class="green" onclick="applyPartialAdd()">Aplică modificările</button>
+    <details class="details-box"><summary>Detalii</summary><div class="notice">
+      Numere lipite: ${rows.length}<br>
+      Numere complet noi: ${newPhones}<br>
+      Există deja la agent: ${existingAtAgent}<br>
+      Apariții noi la agent: ${newAssignments}
+    </div></details>`;
+}
+function applyPartialAdd(){
+  if(!pendingAdd)return alert('Nu există adăugare pregătită.');
+  const {agentId,rows}=pendingAdd;
+  createAutoBackup(`Înainte de adăugare/update parțial la ${empName(agentId)}`);
+  let addedClients=0,addedAssignments=0,updated=0,changed=0,conflicts=0;
+  rows.forEach(r=>{
+    let c=clientByPhone(r.phone);
     if(!c){
-      c={id:uid('cli'),phone:p.phone,note:p.note||'',createdAt:new Date().toISOString(),history:[],assignments:[]};
+      c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat manual/parțial',createdAt:new Date().toISOString(),history:[],assignments:[]};
       db.clients.push(c);
-    }else if(p.note && !c.note){c.note=p.note}
-    if(assignmentOfAny(c,agentId)){same.push(p.phone);return}
-    c.assignments.push({id:uid('as'),agentId,status:'active',inSheet:true,createdAt:new Date().toISOString(),lastVerifiedAt:null,noAnswerCount:0,feedback:'',history:[{date:now(),text:`Adăugat la ${empName(agentId)} ca ACTIV.`}]});
-    c.history.push({date:now(),text:`Apariție nouă la ${empName(agentId)} ca ACTIV.`});
-    if(c.assignments.length>1)addedDuplicate.push(p.phone); else added.push(p.phone);
+      addedClients++;
+    }
+    let as=assignmentOf(c,agentId);
+    if(!as){
+      as={id:uid('as'),agentId,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[{date:now(),text:`Adăugat parțial cu status ${stxt(r.status)}.`}]};
+      if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
+      c.assignments.push(as);
+      c.history.push({date:now(),text:`Apariție nouă la ${empName(agentId)} prin adăugare/update parțial: ${stxt(r.status)}.`});
+      addedAssignments++;
+    }else{
+      const old=as.status, oldSheet=as.inSheet;
+      as.status=r.status;
+      as.inSheet=r.status==='active';
+      as.lastVerifiedAt=new Date().toISOString();
+      if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();else{delete as.removedFromSheetAt;delete as.missingAt}
+      if(old!==as.status||oldSheet!==as.inSheet){
+        as.history.push({date:now(),text:`Update parțial: ${stxt(old)} → ${stxt(as.status)}. ${as.inSheet?'În Sheet.':'Scos din Sheet.'}`});
+        c.history.push({date:now(),text:`La ${empName(agentId)} update parțial: ${stxt(old)} → ${stxt(as.status)}.`});
+        changed++;
+      }
+    }
+    updated++;
+    if(clientHasConflict(c))conflicts++;
   });
+  pendingAdd=null;
   save();
-  el('entryReport').innerHTML=`<div class="notice ok"><b>Salvat.</b><br>Adăugate noi: ${added.length}<br>Adăugate ca dublură la agent: ${addedDuplicate.length}<br>Existau deja la agent: ${same.length}</div>
-  ${addedDuplicate.length?`<h3>Dubluri la mai mulți agenți</h3><div class="mono">${esc(addedDuplicate.join('\\n'))}</div>`:''}
-  ${same.length?`<h3>Existau deja la agent</h3><div class="mono">${esc(same.join('\\n'))}</div>`:''}`;
+  renderAddParsedPreview(rows,agentId);
+  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
+  el('entryReport').className='notice';
+  el('entryReport').innerHTML=`<h3 style="margin-top:0">Adăugare / actualizare aplicată</h3>
+    <div class="notice ok">Agent: <b>${esc(empName(agentId))}</b></div>
+    ${summaryCards({active,brown,red,missing:0,newCount:addedAssignments,conflict:conflicts})}
+    <div class="big-status ok">Modificările au fost aplicate. Nu s-au verificat numere dispărute.</div>
+    <details class="details-box"><summary>Detalii</summary><div class="notice">
+      Verificate: ${updated}<br>
+      Clienți noi creați: ${addedClients}<br>
+      Apariții noi adăugate: ${addedAssignments}<br>
+      Status/stare Sheet schimbate: ${changed}<br>
+      Conflicte după update: ${conflicts}<br>
+      <span class="muted">Notă: un client nou este numărat o singură dată la NOI, chiar dacă i se creează și apariția la agent.</span>
+    </div></details>`;
+}
+function renderAddParsedPreview(rows,agentId){
+  const tbody=el('addParsedPreview');
+  if(!tbody)return;
+  tbody.innerHTML=rows.length?rows.map(r=>{
+    const c=clientByPhone(r.phone);
+    const exists=c?assignmentOf(c,agentId):null;
+    const other=c&&!exists;
+    return `<tr><td><div class="phone">${esc(r.phone)}</div></td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${exists?'<span class="pill green">există la agent</span>':other?'<span class="pill orange">există la alt agent</span>':'<span class="pill gray">nou</span>'}</td></tr>`;
+  }).join(''):'<tr><td colspan="4" class="muted">Nimic citit.</td></tr>';
 }
 
 /* Culori import */
 const pasteBox=el('colorPasteBox');
 pasteBox.addEventListener('paste',e=>{lastHtmlPaste=e.clipboardData.getData('text/html')||'';lastTextPaste=e.clipboardData.getData('text/plain')||''});
+const addPasteBox=el('addPasteBox');
+if(addPasteBox)addPasteBox.addEventListener('paste',e=>{lastAddHtmlPaste=e.clipboardData.getData('text/html')||'';lastAddTextPaste=e.clipboardData.getData('text/plain')||''});
 function clearPasteBox(){lastHtmlPaste='';lastTextPaste='';el('colorPasteBox').innerHTML='';el('plainPaste').value='';el('parsedPreview').innerHTML='';pendingImport=null}
 function processPasteBox(){let rows=parseColoredHtml(lastHtmlPaste||el('colorPasteBox').innerHTML||'');if(!rows.length)rows=parsePlainRows(lastTextPaste||el('colorPasteBox').innerText||'');processImportedRows(rows)}
 function processPlainText(){processImportedRows(parsePlainRows(el('plainPaste').value))}
@@ -548,7 +875,6 @@ function isWhiteLike(c){const rgb=colorToRgb(c);return rgb?rgb.r>245&&rgb.g>245&
 function rgbToHsl(r,g,b){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h=0,s=0,l=(max+min)/2;if(max!==min){const d=max-min;s=l>.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4}h*=60}return{h,s,l}}
 function statusFromColor(color){
   const raw=String(color||'').trim().toLowerCase().replace(/\s+/g,'');
-  // Roșu exact = ROȘU, maro exact = MARO, orice altă culoare = ACTIV
   if(raw.includes('#ff0000')||raw.includes('rgb(255,0,0)'))return'red';
   if(raw.includes('#5b0f00')||raw.includes('rgb(91,15,0)'))return'brown';
   return'active';
@@ -624,6 +950,15 @@ function summaryCards({active=0,brown=0,red=0,missing=0,newCount=0,conflict=0}){
     <div class="summary-card purple"><strong>${conflict}</strong><span>CONFLICT</span></div>
   </div>`;
 }
+function auditRisk(a, rows){
+  const expected=a.expected?.length||0;
+  const missing=a.missing?.length||0;
+  const pasted=rows?.length||0;
+  const missingRate=expected?missing/expected:0;
+  const pastedRate=expected?pasted/expected:1;
+  const risky=expected>=20 && (missing>=5 || missingRate>=0.20 || pastedRate<0.80);
+  return{expected,missing,pasted,missingRate,pastedRate,risky};
+}
 function processFullAuditRows(rows){
   if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';return}
   const a=analyzeFullAudit(rows);
@@ -636,14 +971,18 @@ function processFullAuditRows(rows){
   if(a.ambiguous){msg='Nu pot decide agentul: scor egal între agenți. Alege agentul sursă manual.';cls='bad'}
   else if(!a.detected){msg='Nu pot detecta agentul. Alege agentul sursă manual.';cls='bad'}
   else if(a.oldTransferredExists>0){msg=`Atenție: ${a.oldTransferredExists} numere au mai fost la agentul acesta și acum sunt doar istorice/transferate. Nu aplic automat.`;cls='bad'}
-  else if(a.missing.length>0||a.conflicts>0||a.extra.length>0||a.willAddAssignment>0){msg='Atenție: există schimbări importante. Verifică rezumatul, apoi aplică.';cls='warn'}
+  else {
+    const risk=auditRisk(a,rows);
+    if(risk.risky){msg=`ATENȚIE MARE: lista pare incompletă. Lipsesc ${risk.missing} din ${risk.expected} numere așteptate.`;cls='bad'}
+    else if(a.missing.length>0||a.conflicts>0||a.extra.length>0||a.willAddAssignment>0){msg='Atenție: există schimbări importante. Verifică rezumatul, apoi aplică.';cls='warn'}
+  }
   el('retReport').className='notice';
-  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Preview audit complet</h3>
+  el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Preview audit listă</h3>
     <div class="notice ${a.detected&&!a.ambiguous?'ok':'bad'}">Agent: <b>${a.detected?esc(empName(a.detected)):'nedetectat'}</b></div>
     ${summaryCards({active,brown,red,missing:a.missing.length,newCount:a.extra.length+a.willAddAssignment,conflict:a.conflicts})}
     <div class="big-status ${cls}">${esc(msg)}</div>
     ${can?'<button class="green" onclick="applyFullAudit()">Aplică modificările</button>':''}
-    ${a.missing.length?`<h3>Vor deveni DISPĂRUT</h3><div class="mono">${esc(a.missing.map(x=>`${x.client.phone} | ${x.client.note||''}`).join('\\n'))}</div>`:''}
+    ${a.missing.length?`<h3>Vor deveni DISPĂRUT</h3><div class="notice bad">${a.missing.map(x=>`<div style="padding:6px 0;border-bottom:1px solid #fecaca"><b>${esc(x.client.phone)}</b>${x.client.note?` <span class="muted">| ${esc(x.client.note)}</span>`:''}</div>`).join('')}</div>`:''}
     <details class="details-box"><summary>Detalii</summary><div class="notice">
       Numere lipite: ${rows.length}<br>
       Așteptate în Sheet la agent: ${a.expected.length}<br>
@@ -664,17 +1003,19 @@ function applyFullAudit(){
   const rows=pendingImport.rows,a=analyzeFullAudit(rows);
   if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
   if(a.oldTransferredExists>0)return alert('Există numere care au fost deja transferate/istorice la acest agent. Verifică manual înainte.');
-  createAutoBackup(`Înainte de audit complet pentru ${empName(a.detected)}`);
+  const risk=auditRisk(a,rows);
+  if(risk.risky && !confirm(`ATENȚIE: lista pare incompletă. Ai lipit ${risk.pasted} rânduri, dar erau ${risk.expected} numere așteptate în Sheet. ${risk.missing} vor deveni DISPĂRUT. Continui?`))return;
+  createAutoBackup(`Înainte de audit listă pentru ${empName(a.detected)}`);
   let updated=0,addedClients=0,addedAssignments=0,changed=0,missingCount=0,conflicts=0;
   rows.forEach(r=>{
     let c=clientByPhone(r.phone);
-    if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din audit complet',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
+    if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din audit listă',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
     let as=assignmentOf(c,a.detected);
     if(!as){
       as={id:uid('as'),agentId:a.detected,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
       c.assignments.push(as);addedAssignments++;
-      c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} din audit complet cu status ${stxt(r.status)}.`});
+      c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} din audit listă cu status ${stxt(r.status)}.`});
     }else{
       const old=as.status, oldSheet=as.inSheet;
       as.status=r.status;
@@ -682,7 +1023,7 @@ function applyFullAudit(){
       as.lastVerifiedAt=new Date().toISOString();
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();else{delete as.removedFromSheetAt;delete as.missingAt}
       if(old!==as.status || oldSheet!==as.inSheet){
-        as.history.push({date:now(),text:`Audit complet: ${stxt(old)} → ${stxt(as.status)}. ${as.inSheet?'Rămâne în Sheet.':'Scos oficial din Sheet.'}`});
+        as.history.push({date:now(),text:`Audit listă: ${stxt(old)} → ${stxt(as.status)}. ${as.inSheet?'Rămâne în Sheet.':'Scos oficial din Sheet.'}`});
         c.history.push({date:now(),text:`La ${empName(a.detected)}: ${stxt(old)} → ${stxt(as.status)}.`});
         changed++;
       }
@@ -696,7 +1037,7 @@ function applyFullAudit(){
     x.as.inSheet=false;
     x.as.lastVerifiedAt=new Date().toISOString();
     x.as.missingAt=new Date().toISOString();
-    x.as.history.push({date:now(),text:`Lipsă din audit complet. ${stxt(old)} → DISPARUT.`});
+    x.as.history.push({date:now(),text:`Lipsă din audit listă. ${stxt(old)} → DISPARUT.`});
     x.client.history.push({date:now(),text:`La ${empName(a.detected)}: nu s-a regăsit în lista completă. Mutat la DISPARUT.`});
     missingCount++;
   });
@@ -713,85 +1054,324 @@ function renderParsedPreview(rows){
   el('parsedPreview').innerHTML=rows.length?rows.map(r=>{const c=clientByPhone(r.phone);return`<tr><td><div class="phone s-${r.status}">${esc(r.phone)}</div></td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${c?clientAgentsHtml(c):'<span class="pill blue">nou</span>'}</td></tr>`}).join(''):'<tr><td colspan="4" class="muted">Nimic citit.</td></tr>';
 }
 
+
+/* Modal edit client */
+function openClientModal(clientId){
+  currentModalClientId=clientId;
+  renderClientModal();
+  el('clientModalBackdrop').classList.remove('hidden');
+  document.body.classList.add('modal-open');
+}
+function closeClientModal(){
+  currentModalClientId=null;
+  el('clientModalBackdrop').classList.add('hidden');
+  document.body.classList.remove('modal-open');
+}
+function renderClientModal(){
+  const c=db.clients.find(x=>x.id===currentModalClientId);
+  if(!c)return;
+  el('modalTitle').textContent=`Edit / Istoric: ${c.phone}`;
+  el('modalSubtitle').innerHTML=`${clientHasConflict(c)?'<span class="pill purple">CONFLICT</span> ':''}${clientAgentsHtml(c)}`;
+  el('modalPhone').value=c.phone;
+  el('modalNote').value=c.note||'';
+  const oldAgent=el('modalAgent').value;
+  el('modalAgent').innerHTML=activeEmployees().map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+  if(oldAgent&&[...el('modalAgent').options].some(o=>o.value===oldAgent))el('modalAgent').value=oldAgent;
+
+  el('modalAssignments').innerHTML=(c.assignments||[]).length?(c.assignments||[]).map(a=>`
+    <tr>
+      <td>${esc(empName(a.agentId))}</td>
+      <td>${label(a.status)}</td>
+      <td>
+        ${a.transferredAt?'<span class="pill gray">transferat</span>':a.inSheet===false?'<span class="pill orange">scos din Sheet</span>':'<span class="pill green">în Sheet</span>'}
+        ${a.transferredToAgentId?`<div class="muted">către ${esc(empName(a.transferredToAgentId))}</div>`:''}
+      </td>
+      <td><button class="small red" onclick="deleteAssignmentFromModal('${a.id}')">Șterge apariția</button></td>
+    </tr>
+  `).join(''):'<tr><td colspan="4" class="muted">Nu există apariții.</td></tr>';
+
+  const timeline=[];
+  (c.history||[]).forEach(h=>timeline.push({date:h.date||'',text:h.text||''}));
+  (c.assignments||[]).forEach(a=>{
+    (a.history||[]).forEach(h=>timeline.push({date:h.date||'',text:`${empName(a.agentId)}: ${h.text||''}`}));
+    if(a.transferredAt)timeline.push({date:a.transferredAt,text:`${empName(a.agentId)}: transferat către ${empName(a.transferredToAgentId)}.`});
+  });
+  el('modalTimeline').innerHTML=timeline.length?timeline.map(h=>`<div class="timeline-item"><b>${esc(h.date||'')}</b><br>${esc(h.text||'')}</div>`).join(''):'<div class="muted">Nu există istoric.</div>';
+}
+function saveClientNote(){
+  const c=db.clients.find(x=>x.id===currentModalClientId);
+  if(!c)return;
+  const old=c.note||'';
+  c.note=(el('modalNote').value||'').trim();
+  if(old!==c.note)c.history.push({date:now(),text:`Notă client modificată manual.`});
+  save();
+  renderClientModal();
+}
+function applyManualAction(){
+  const c=db.clients.find(x=>x.id===currentModalClientId);
+  if(!c)return;
+  const agentId=el('modalAgent').value;
+  const action=el('modalAction').value;
+  const note=(el('modalManualNote').value||'').trim();
+  if(!agentId)return alert('Alege agentul.');
+  if(action==='add_history'){
+    c.history.push({date:now(),text:`Notă manuală: ${note||'(fără detalii)'}`});
+    el('modalManualNote').value='';
+    save();renderClientModal();return;
+  }
+  const statusMap={set_active:'active',set_brown:'brown',set_red:'red',set_missing:'missing'};
+  const newStatus=statusMap[action];
+  if(!newStatus)return;
+  let as=assignmentOf(c,agentId);
+  if(!as){
+    as={id:uid('as'),agentId,status:newStatus,inSheet:newStatus==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};
+    c.assignments.push(as);
+    c.history.push({date:now(),text:`Modificare manuală: apariție nouă la ${empName(agentId)} cu status ${stxt(newStatus)}. ${note?`Motiv: ${note}`:''}`});
+  }else{
+    const old=as.status;
+    as.status=newStatus;
+    as.inSheet=newStatus==='active';
+    as.lastVerifiedAt=new Date().toISOString();
+    if(newStatus==='active'){delete as.removedFromSheetAt;delete as.missingAt}else as.removedFromSheetAt=new Date().toISOString();
+    as.history.push({date:now(),text:`Modificare manuală: ${stxt(old)} → ${stxt(newStatus)}. ${as.inSheet?'În Sheet.':'Scos din Sheet.'} ${note?`Motiv: ${note}`:''}`});
+    c.history.push({date:now(),text:`Manual la ${empName(agentId)}: ${stxt(old)} → ${stxt(newStatus)}. ${note?`Motiv: ${note}`:''}`});
+  }
+  el('modalManualNote').value='';
+  save();
+  renderClientModal();
+}
+function deleteAssignmentFromModal(asId){
+  const c=db.clients.find(x=>x.id===currentModalClientId);
+  if(!c)return;
+  const a=(c.assignments||[]).find(x=>x.id===asId);
+  if(!a)return;
+  if(!confirm(`Ștergi apariția numărului ${c.phone} la ${empName(a.agentId)}?`))return;
+  c.assignments=c.assignments.filter(x=>x.id!==asId);
+  c.history.push({date:now(),text:`Apariție ștearsă definitiv de la ${empName(a.agentId)}.`});
+  if(!c.assignments.length){
+    db.clients=db.clients.filter(x=>x.id!==c.id);
+    closeClientModal();
+  }
+  save();
+  if(currentModalClientId)renderClientModal();
+}
+function archiveClientFromModal(){
+  const c=db.clients.find(x=>x.id===currentModalClientId);
+  if(!c)return;
+  if(!confirm(`Ștergi peste tot numărul ${c.phone} din baza activă?`))return;
+  db.clients=db.clients.filter(x=>x.id!==c.id);
+  closeClientModal();
+  save();
+}
+
 /* Verificare */
 function renderVerification(){
   selectOptions(['verifyEmpFilter'],true);
-  const sf=el('verifyStatusFilter')?.value||'all',ef=el('verifyEmpFilter')?.value||'all',q=clean(el('verifySearch')?.value||'');
+  const sf=el('verifyStatusFilter')?.value||'all';
+  const ef=el('verifyEmpFilter')?.value||'all';
+  const q=clean(el('verifySearch')?.value||'');
+
   let rows=[];
   db.clients.forEach(c=>{
+    const activeAs=activeAssignments(c);
     const conflict=clientHasConflict(c);
-    activeAssignments(c).forEach(a=>{
-      const exhausted=isBrownExhausted(c,a);
-      if(['brown','red','missing'].includes(a.status)||conflict||exhausted)rows.push({client:c,as:a,conflict,exhausted});
-    });
+    const exhausted=activeAs.some(a=>isBrownExhausted(c,a));
+    const hasVerifyStatus=activeAs.some(a=>['brown','red','missing'].includes(a.status));
+
+    if(!(hasVerifyStatus||conflict||exhausted))return;
+
+    let relevant=activeAs.filter(a=>['brown','red','missing'].includes(a.status)||conflict||isBrownExhausted(c,a));
+
+    if(sf==='conflict'){
+      if(!conflict)return;
+    }else if(sf!=='all'){
+      if(!activeAs.some(a=>a.status===sf))return;
+      relevant=relevant.filter(a=>a.status===sf || conflict || isBrownExhausted(c,a));
+    }
+
+    if(ef!=='all'){
+      if(!activeAs.some(a=>a.agentId===ef))return;
+      relevant=relevant.filter(a=>a.agentId===ef || conflict);
+    }
+
+    if(q && !clean([c.phone,c.note,clientAgentsHtml(c),(c.history||[]).map(h=>h.text).join(' '),(activeAs||[]).map(a=>a.feedback||'').join(' ')].join(' ')).includes(q))return;
+
+    rows.push({client:c,relevant,conflict,exhausted});
   });
-  if(sf==='conflict')rows=rows.filter(r=>r.conflict);
-  else if(sf!=='all')rows=rows.filter(r=>r.as.status===sf);
-  if(ef!=='all')rows=rows.filter(r=>r.as.agentId===ef);
-  if(q)rows=rows.filter(r=>clean([r.client.phone,r.client.note,r.as.feedback,empName(r.as.agentId),clientAgentsHtml(r.client)].join(' ')).includes(q));
-  rows=rows.sort((a,b)=>(b.conflict-a.conflict)||(b.exhausted-a.exhausted)||({missing:0,red:1,brown:2,active:3}[a.as.status]-{missing:0,red:1,brown:2,active:3}[b.as.status]));
+
+  rows=rows.sort((a,b)=>
+    (b.conflict-a.conflict)||
+    (b.exhausted-a.exhausted)||
+    ((b.relevant?.length||0)-(a.relevant?.length||0))||
+    (a.client.phone||'').localeCompare(b.client.phone||'')
+  );
+
   const conflicts=db.clients.filter(clientHasConflict).length;
-  const exhaustedCount=db.clients.reduce((s,c)=>s+activeAssignments(c).filter(a=>isBrownExhausted(c,a)).length,0);
-  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b>`;
-  el('verifyRows').innerHTML=rows.length?rows.map(r=>`<tr>
-    <td><div class="phone">${esc(r.client.phone)}</div><div class="muted">${esc(r.client.note||'')}</div>${r.conflict?'<span class="pill purple">CONFLICT</span>':''}${r.exhausted?'<span class="pill exhausted">MARO EPUIZAT</span>':''}</td>
-    <td>${esc(empName(r.as.agentId))}<br>${label(r.as.status)}</td>
-    <td>${clientAgentsHtml(r.client)}</td>
-    <td><div class="counter"><button class="small secondary" onclick="changeNoAnswer('${r.client.id}','${r.as.id}',-1)">-</button><strong>${r.as.noAnswerCount||0}</strong><button class="small orange" onclick="changeNoAnswer('${r.client.id}','${r.as.id}',1)">+</button></div></td>
-    <td><textarea class="feedback" id="fb_${r.as.id}" placeholder="Feedback...">${esc(r.as.feedback||'')}</textarea><button class="small green" onclick="saveFeedback('${r.client.id}','${r.as.id}')">Salvează</button></td>
-    <td><button class="small red" onclick="deleteAssignment('${r.client.id}','${r.as.id}')">Șterge apariția</button><br><button class="small secondary" onclick="deleteClientForever('${r.client.id}')">Șterge tot</button></td>
-  </tr>`).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
+  const exhaustedCount=db.clients.filter(c=>activeAssignments(c).some(a=>isBrownExhausted(c,a))).length;
+
+  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b>`;
+
+  el('verifyRows').innerHTML=rows.length?rows.map(r=>{
+    const c=r.client;
+    const relevant=r.relevant&&r.relevant.length?r.relevant:activeAssignments(c);
+    const primary=relevant[0];
+
+    const statusBadges=relevant.map(a=>`
+      <div class="verify-agent-block">
+        <b>${esc(empName(a.agentId))}</b><br>
+        ${label(a.status)}
+        ${isBrownExhausted(c,a)?'<span class="pill exhausted">MARO EPUIZAT</span>':''}
+      </div>
+    `).join('');
+
+    const noAnswerControls=primary?`
+      <div class="verify-counter">
+        <button class="small secondary" onclick="changeNoAnswer('${c.id}','${primary.id}',-1)">-</button>
+        <strong>${primary.noAnswerCount||0}</strong>
+        <button class="small orange" onclick="changeNoAnswer('${c.id}','${primary.id}',1)">+</button>
+      </div>`:'—';
+
+    const feedbackControls=primary?`
+      <textarea class="feedback-mini" placeholder="Feedback..." oninput="autoSaveFeedback('${c.id}','${primary.id}',this.value)">${esc(primary.feedback||'')}</textarea>`:'—';
+
+    return `<tr>
+      <td>
+        <div class="phone">${esc(c.phone)}</div>
+        <div class="muted">${esc(c.note||'')}</div>
+        ${r.conflict?'<span class="pill purple">CONFLICT</span>':''}
+        ${r.exhausted?'<span class="pill exhausted">MARO EPUIZAT</span>':''}
+      </td>
+      <td>${statusBadges}</td>
+      <td>${clientAgentsHtml(c)}</td>
+      <td>${noAnswerControls}</td>
+      <td>${feedbackControls}</td>
+      <td>
+        <button class="small" onclick="openClientModal('${c.id}')">Edit / Istoric</button><br>
+        <button class="small secondary" onclick="deleteClientForever('${c.id}')" style="margin-top:6px">Șterge peste tot</button>
+      </td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
 }
 function findAs(clientId,asId){const c=db.clients.find(x=>x.id===clientId);return[c,c?.assignments?.find(a=>a.id===asId)]}
 function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!a)return;a.noAnswerCount=Math.max(0,(a.noAnswerCount||0)+delta);a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}
-function saveFeedback(clientId,asId){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=(el('fb_'+asId)?.value||'').trim();a.history.push({date:now(),text:`Feedback salvat: ${a.feedback||'(gol)'}`});save()}
-function deleteAssignment(clientId,asId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;const a=c.assignments.find(x=>x.id===asId);if(!a)return;if(!confirm(`Ștergi apariția numărului ${c.phone} la ${empName(a.agentId)}?`))return;db.deletedRecords.push({type:'assignment',client:clone(c),assignment:clone(a),deletedAt:new Date().toISOString(),deletedAtRo:now()});c.assignments=c.assignments.filter(x=>x.id!==asId);c.history.push({date:now(),text:`Apariția la ${empName(a.agentId)} a fost ștearsă din baza activă.`});if(!c.assignments.length)db.clients=db.clients.filter(x=>x.id!==clientId);save()}
-function deleteClientForever(clientId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;if(!confirm(`Ștergi complet numărul ${c.phone} din baza activă?`))return;db.deletedRecords.push({type:'client',client:clone(c),deletedAt:new Date().toISOString(),deletedAtRo:now()});db.clients=db.clients.filter(x=>x.id!==clientId);save()}
+function autoSaveFeedback(clientId,asId,value){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=String(value||'');a.feedbackUpdatedAt=new Date().toISOString();persistOnly()}
+function saveFeedback(clientId,asId){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=(el('fb_'+asId)?.value||'').trim();persistOnly()}
+function deleteAssignment(clientId,asId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;const a=c.assignments.find(x=>x.id===asId);if(!a)return;if(!confirm(`Ștergi apariția numărului ${c.phone} la ${empName(a.agentId)}?`))return;c.assignments=c.assignments.filter(x=>x.id!==asId);c.history.push({date:now(),text:`Apariția la ${empName(a.agentId)} a fost ștearsă definitiv.`});if(!c.assignments.length)db.clients=db.clients.filter(x=>x.id!==clientId);save()}
+function deleteClientForever(clientId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;if(!confirm(`Ștergi peste tot numărul ${c.phone} din baza activă?`))return;db.clients=db.clients.filter(x=>x.id!==clientId);save()}
 
 /* Transfer */
 function renderTransfer(){
   selectOptions(['trTo']);
   const to=el('trTo')?.value||'';
-  if(!to){el('trInfo').innerHTML='Alege agentul destinație.';el('trRows').innerHTML='<tr><td colspan="5" class="muted">Nu există agent destinație.</td></tr>';return}
+  if(!to){el('trInfo').innerHTML='Alege agentul destinație.';el('trRows').innerHTML='<tr><td colspan="4" class="muted">Nu există agent destinație.</td></tr>';return}
+
   let rows=[];
-  db.clients.forEach(c=>activeAssignments(c).forEach(a=>{if(a.status==='brown'&&a.agentId!==to&&!hasEverBeenTo(c,to))rows.push({client:c,as:a})}));
-  rows.sort((a,b)=>(a.as.lastVerifiedAt||a.as.createdAt||'').localeCompare(b.as.lastVerifiedAt||b.as.createdAt||''));
-  const by={};rows.forEach(r=>by[r.as.agentId]=(by[r.as.agentId]||0)+1);
-  el('trInfo').innerHTML=`Către <b>${esc(empName(to))}</b> | Eligibile: <b>${rows.length}</b><br>Surse: ${Object.entries(by).map(([id,c])=>empName(id)+': '+c).join(' | ')||'—'}`;
-  el('trRows').innerHTML=rows.length?rows.map(r=>`<tr><td><input type="checkbox" class="trChk" value="${r.client.id}::${r.as.id}"></td><td><div class="phone s-brown">${esc(r.client.phone)}</div></td><td>${esc(r.client.note||'')}</td><td>${esc(empName(r.as.agentId))}</td><td>${r.client.assignments.map(a=>`<span class="pill gray">${esc(empName(a.agentId))}</span>`).join('')}</td></tr>`).join(''):'<tr><td colspan="5" class="muted">Nu există MARO eligibile.</td></tr>';
+  const blockedStatus=new Set();
+  const blockedDestination=new Set();
+  const totalBrownClients=new Set();
+
+  db.clients.forEach(c=>{
+    const activeAs=activeAssignments(c);
+    const brownSources=activeAs.filter(a=>a.status==='brown');
+    if(!brownSources.length)return;
+
+    totalBrownClients.add(c.id);
+
+    const reason=transferBlockReason(c);
+    if(reason){
+      blockedStatus.add(c.id);
+      return;
+    }
+
+    if(hasEverBeenTo(c,to)){
+      blockedDestination.add(c.id);
+      return;
+    }
+
+    rows.push({client:c,sources:brownSources});
+  });
+
+  rows.sort((a,b)=>{
+    const da=a.sources.map(x=>x.lastVerifiedAt||x.createdAt||'').sort()[0]||'';
+    const dbb=b.sources.map(x=>x.lastVerifiedAt||x.createdAt||'').sort()[0]||'';
+    return da.localeCompare(dbb);
+  });
+
+  const by={};
+  rows.forEach(r=>r.sources.forEach(a=>{by[a.agentId]=(by[a.agentId]||0)+1}));
+
+  el('trInfo').innerHTML=`Către <b>${esc(empName(to))}</b> | Numere eligibile unice: <b>${rows.length}</b><br>
+    Total numere cu MARO: <b>${totalBrownClients.size}</b> | Blocate pentru că au și ACTIV/ROȘU/DISPĂRUT: <b>${blockedStatus.size}</b> | Blocate pentru destinație/istoric: <b>${blockedDestination.size}</b><br>
+    Regula: se transferă doar dacă toate aparițiile active ale numărului sunt MARO.<br>
+    Surse MARO: ${Object.entries(by).map(([id,c])=>empName(id)+': '+c).join(' | ')||'—'}`;
+
+  el('trRows').innerHTML=rows.length?rows.map(r=>`
+    <tr>
+      <td><input type="checkbox" class="trChk" value="${r.client.id}"></td>
+      <td><div class="phone s-brown">${esc(r.client.phone)}</div></td>
+      <td>${esc(r.client.note||'')}</td>
+      <td>${r.client.assignments.map(a=>`<span class="pill gray">${esc(empName(a.agentId))}</span>`).join('')}</td>
+    </tr>`).join(''):'<tr><td colspan="4" class="muted">Nu există MARO eligibile. Dacă un număr are ACTIV, ROȘU sau DISPĂRUT la orice agent, nu poate fi transferat.</td></tr>';
 }
 function toggleAll(v){document.querySelectorAll('.trChk').forEach(x=>x.checked=v)}
 function selectFirstTransfer(n){[...document.querySelectorAll('.trChk')].forEach((x,i)=>x.checked=i<n)}
 function selectFirstTransferFromInput(){const n=parseInt(el('transferCount')?.value||'0',10);if(!n)return alert('Scrie un număr valid.');selectFirstTransfer(n)}
 function transferBrown(){
   const to=el('trTo')?.value||'';if(!to)return alert('Alege agentul destinație.');
-  const vals=[...document.querySelectorAll('.trChk:checked')].map(x=>x.value);if(!vals.length)return alert('Selectează clienți.');
+  const vals=[...document.querySelectorAll('.trChk:checked')].map(x=>x.value);
+  if(!vals.length)return alert('Selectează clienți.');
+
   createAutoBackup(`Înainte de transfer MARO către ${empName(to)}`);
+
   const moved=[],blocked=[],sourceCounter={};
+  const uniqueClientIds=[...new Set(vals)];
 
-  vals.forEach(v=>{
-    const [cid,aid]=v.split('::');
+  uniqueClientIds.forEach(cid=>{
     const c=db.clients.find(x=>x.id===cid);
-    const a=c?.assignments.find(x=>x.id===aid);
-    if(!c||!a)return;
-    if(assignmentOf(c,to)){blocked.push(c);return}
+    if(!c)return;
 
-    a.transferredAt=new Date().toISOString();
-    a.transferredToAgentId=to;
-    sourceCounter[a.agentId]=(sourceCounter[a.agentId]||0)+1;
+    const activeAs=activeAssignments(c);
+    const brownSources=activeAs.filter(a=>a.status==='brown');
+
+    if(!brownSources.length){blocked.push(c);return}
+
+    // Blocare importantă: se transferă doar dacă toate aparițiile active sunt MARO.
+    if(transferBlockReason(c)){blocked.push(c);return}
+
+    // Nu îl mai trimitem către un agent la care a fost vreodată.
+    if(hasEverBeenTo(c,to)){blocked.push(c);return}
+
+    const transferDate=new Date().toISOString();
+    const sourceNames=brownSources.map(a=>empName(a.agentId)).join(', ');
+
+    brownSources.forEach(a=>{
+      a.transferredAt=transferDate;
+      a.transferredToAgentId=to;
+      a.inSheet=false;
+      sourceCounter[a.agentId]=(sourceCounter[a.agentId]||0)+1;
+      a.history=a.history||[];
+      a.history.push({date:now(),text:`Transferat către ${empName(to)} împreună cu sursele MARO: ${sourceNames}.`});
+    });
 
     c.assignments.push({
       id:uid('as'),
       agentId:to,
       status:'active',
-      createdAt:new Date().toISOString(),
+      inSheet:true,
+      createdAt:transferDate,
       lastVerifiedAt:null,
       noAnswerCount:0,
       feedback:'',
-      history:[{date:now(),text:`Primit prin transfer MARO de la ${empName(a.agentId)}.`}]
+      history:[{date:now(),text:`Primit prin transfer MARO de la: ${sourceNames}.`}]
     });
-    c.history.push({date:now(),text:`Transfer MARO de la ${empName(a.agentId)} către ${empName(to)}. Noua apariție este ACTIV.`});
-    moved.push({client:c,fromAgentId:a.agentId,sourceAssignmentId:a.id});
+
+    c.history.push({date:now(),text:`Transfer MARO unic către ${empName(to)}. Surse: ${sourceNames}. Noua apariție este ACTIV.`});
+
+    moved.push({
+      client:c,
+      fromAgentIds:brownSources.map(a=>a.agentId),
+      sourceAssignmentIds:brownSources.map(a=>a.id)
+    });
   });
 
   if(moved.length){
@@ -800,10 +1380,11 @@ function transferBrown(){
       clientId:x.client.id,
       phone:x.client.phone,
       note:x.client.note||'',
-      fromAgentId:x.fromAgentId,
+      fromAgentIds:x.fromAgentIds,
       toAgentId:to,
-      sourceAssignmentId:x.sourceAssignmentId
+      sourceAssignmentIds:x.sourceAssignmentIds
     }));
+
     db.transfers=db.transfers||[];
     db.transfers.push({
       id:transferId,
@@ -822,16 +1403,13 @@ function transferBrown(){
   if(moved.length){
     const text=transferTextFromItems(moved.map(x=>({
       phone:x.client.phone,
-      note:x.client.note||'',
-      fromAgentId:x.fromAgentId
+      note:x.client.note||''
     })));
-    copyTextToClipboard(text,`Transferate către ${empName(to)}: ${moved.length}. Lista a fost copiată în clipboard. Surse: ${sources||'—'}. Blocate: ${blocked.length}.`);
+    copyTextToClipboard(text,`Transferate către ${empName(to)}: ${moved.length} numere unice. Lista a fost copiată în clipboard. Surse MARO: ${sources||'—'}. Blocate: ${blocked.length}.`);
   }else{
     alert(`Nu s-a transferat nimic. Blocate: ${blocked.length}.`);
   }
 }
-
-
 
 /* Istoric transferuri */
 function transferTextFromItems(items){
@@ -871,12 +1449,29 @@ function renderTransferHistory(){
 }
 
 /* Backup */
-function createAutoBackup(reason){db.backups=db.backups||[];db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:{version:db.version,createdAt:db.createdAt,employees:clone(db.employees),clients:clone(db.clients),deletedRecords:clone(db.deletedRecords||[]),transfers:clone(db.transfers||[])}});if(db.backups.length>10)db.backups=db.backups.slice(-10)}
-function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');if(!confirm(`Revii la backup-ul din ${b.createdAtRo}?`))return;const keep=db.backups;db={...clone(b.data),backups:keep};save()}
-function renderBackupInfo(){const box=el('backupInfo');if(!box)return;const b=db.backups?.[db.backups.length-1];box.innerHTML=b?`Ultimul backup: <b>${esc(b.createdAtRo)}</b><br>${esc(b.reason||'')}`:'Încă nu există backup automat.'}
-function exportDb(){download(db,'baza_verificare_clienti_mongo.json')}
+function createAutoBackup(reason){db.backups=db.backups||[];db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:{version:db.version,createdAt:db.createdAt,employees:clone(db.employees),deletedEmployeeNames:clone(db.deletedEmployeeNames||{}),clients:clone(db.clients),deletedRecords:[],transfers:clone(db.transfers||[])}});if(db.backups.length>3)db.backups=db.backups.slice(-3)}
+function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');restoreBackup(b.id)}
+function restoreBackup(id){
+  const b=(db.backups||[]).find(x=>x.id===id);
+  if(!b)return alert('Backup inexistent.');
+  if(!confirm(`Revii la backup-ul din ${b.createdAtRo}?`))return;
+  const keep=db.backups;
+  db={...clone(b.data),deletedRecords:[],backups:keep};
+  save();
+}
+function renderBackupInfo(){
+  const box=el('backupInfo');if(!box)return;
+  const rows=(db.backups||[]).slice().reverse();
+  if(!rows.length){box.innerHTML='Încă nu există backup automat.';return}
+  box.innerHTML=`<b>Backup-uri salvate: ${rows.length}/3</b><br>
+    <div style="margin-top:8px">${rows.map(b=>`<div class="backup-row">
+      <div><b>${esc(b.createdAtRo||'')}</b><br><span class="muted">${esc(b.reason||'')}</span></div>
+      <button class="small orange" onclick="restoreBackup('${b.id}')">Restaurează</button>
+    </div>`).join('')}</div>`;
+}
+function exportDb(){download(db,'backup_verificare_clienti_render.json')}
 function copyDb(){navigator.clipboard.writeText(JSON.stringify(db,null,2)).then(()=>alert('JSON copiat.')).catch(()=>alert('Nu pot copia automat.'))}
-function importDbFile(ev){const f=ev.target.files[0];if(!f)return;if(!confirm('Înlocuiești baza locală?'))return;const r=new FileReader();r.onload=()=>{try{db=normalizeDb(JSON.parse(r.result));save();alert('Bază importată.')}catch(e){alert('Fișier invalid.')}};r.readAsText(f);ev.target.value=''}
+function importDbFile(ev){const f=ev.target.files[0];if(!f)return;if(!confirm('Înlocuiești baza locală?'))return;const r=new FileReader();r.onload=()=>{try{let imported=JSON.parse(r.result);if(imported.db)imported=imported.db;if(imported.data&&imported.data.clients)imported=imported.data;delete imported._id;delete imported._rev;db=normalizeDb(imported);save();alert('Bază importată.')}catch(e){console.error(e);alert('Fișier invalid sau format incompatibil.')}};r.readAsText(f);ev.target.value=''}
 async function resetDb(){
   if(!confirm('Ștergi baza din MongoDB? Fă backup înainte.'))return;
   try{
@@ -884,14 +1479,25 @@ async function resetDb(){
     if(!res.ok)throw new Error(await res.text());
     location.reload();
   }catch(e){
+    console.error(e);
     alert('Nu am putut reseta baza.');
   }
 }
 function previewDb(){el('preview').textContent=JSON.stringify(db,null,2).slice(0,9000)}
 function download(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
 
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['dash','agents','add','return','verify','transfer','transferHistory','backup'].forEach(t=>el('tab-'+t).classList.toggle('hidden',b.dataset.tab!==t));save()});
-save();
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!el('clientModalBackdrop')?.classList.contains('hidden'))closeClientModal()});
+const modalBackdropInit=el('clientModalBackdrop');
+if(modalBackdropInit)modalBackdropInit.addEventListener('click',e=>{if(e.target===modalBackdropInit)closeClientModal()});
+
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['dash','agents','add','return','verify','transfer','transferHistory','backup'].forEach(t=>el('tab-'+t).classList.toggle('hidden',b.dataset.tab!==t));render();renderVerification();renderTransfer();renderTransferHistory();renderBackupInfo();previewDb()});
+render();
+renderVerification();
+renderTransfer();
+renderTransferHistory();
+renderBackupInfo();
+previewDb();
+booting=false;
 </script>
 </body>
 </html>

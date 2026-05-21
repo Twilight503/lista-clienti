@@ -63,3 +63,9 @@ Regula curentă:
 ## Logo / favicon
 
 Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
+
+## Fix audit înainte de aplicare
+
+- În tabelul `Ce a citit` există buton `Elimină`.
+- Dacă elimini un rând, preview-ul și cardurile de sus se recalculează imediat.
+- Contorul `NOI` după aplicare nu mai dublează client nou + apariție nouă.

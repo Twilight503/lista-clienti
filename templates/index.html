@@ -417,6 +417,10 @@ body.modal-open{overflow:hidden}
 </div>
 
 </main>
+<div id="saveStatusFixed" class="save-status-fixed">
+  <span class="save-spinner"></span>
+  <span id="saveStatusText">Se salvează...</span>
+</div>
 
 <script>
 window.__INITIAL_DB__ = {{ initial_db|tojson }};
@@ -616,6 +620,52 @@ let saveTimer = null;
 let isSaving = false;
 let dirtyWhileSaving = false;
 let booting = true;
+let lastActionButton = null;
+let lastButtonIndicator = null;
+let saveIndicatorTimer = null;
+
+document.addEventListener('click', e=>{
+  const b=e.target.closest('button');
+  if(b && !b.classList.contains('tab')) lastActionButton=b;
+}, true);
+
+function setSaveVisual(state){
+  const fixed=el('saveStatusFixed');
+  const text=el('saveStatusText');
+  if(!fixed||!text)return;
+  clearTimeout(saveIndicatorTimer);
+
+  if(state==='saving'){
+    fixed.classList.add('show');
+    fixed.innerHTML='<span class="save-spinner"></span><span id="saveStatusText">Se salvează în baza de date...</span>';
+    if(lastActionButton && document.body.contains(lastActionButton)){
+      if(lastButtonIndicator)lastButtonIndicator.remove();
+      lastButtonIndicator=document.createElement('span');
+      lastButtonIndicator.className='btn-save-indicator';
+      lastButtonIndicator.innerHTML='<span class="save-spinner"></span>';
+      lastActionButton.insertAdjacentElement('afterend',lastButtonIndicator);
+    }
+    return;
+  }
+
+  if(state==='done'){
+    fixed.classList.add('show');
+    fixed.innerHTML='<span class="save-check">✓</span><span id="saveStatusText">Salvat în baza de date</span>';
+    if(lastButtonIndicator)lastButtonIndicator.innerHTML='<span class="save-check">✓</span>';
+    saveIndicatorTimer=setTimeout(()=>{
+      fixed.classList.remove('show');
+      if(lastButtonIndicator){lastButtonIndicator.remove();lastButtonIndicator=null}
+      lastActionButton=null;
+    },1200);
+    return;
+  }
+
+  if(state==='error'){
+    fixed.classList.add('show');
+    fixed.innerHTML='<span class="save-error">!</span><span id="saveStatusText">Eroare la salvare</span>';
+    if(lastButtonIndicator)lastButtonIndicator.innerHTML='<span class="save-error">!</span>';
+  }
+}
 
 function save(){
   purgeExpiredArchive();
@@ -646,6 +696,7 @@ async function persistDb(){
   if(isSaving){dirtyWhileSaving=true;return}
   isSaving=true;
   dirtyWhileSaving=false;
+  setSaveVisual('saving');
   try{
     const res=await fetch('/api/state',{
       method:'POST',
@@ -660,8 +711,10 @@ async function persistDb(){
     if(!res.ok)throw new Error(await res.text());
     const data=await res.json();
     stateRev=data.rev;
+    setSaveVisual('done');
   }catch(e){
     console.error(e);
+    setSaveVisual('error');
     alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
   }finally{
     isSaving=false;
@@ -1194,6 +1247,24 @@ function auditRisk(a, rows){
   const risky=expected>=20 && (missing>=5 || missingRate>=0.20 || pastedRate<0.80);
   return{expected,missing,pasted,missingRate,pastedRate,risky};
 }
+
+function auditPreviewChangeSummary(rows,a){
+  const out={active:0,brown:0,red:0};
+  if(!a || !a.detected || a.ambiguous){
+    rows.forEach(r=>{if(out[r.status]!==undefined)out[r.status]++});
+    return out;
+  }
+  rows.forEach(r=>{
+    const c=clientByPhone(r.phone);
+    const as=c?assignmentOf(c,a.detected):null;
+    if(as && as.status==='safe')return;
+    const desiredSheet=r.status==='active';
+    const willChange=!as || as.status!==r.status || as.inSheet!==desiredSheet;
+    if(willChange && out[r.status]!==undefined)out[r.status]++;
+  });
+  return out;
+}
+
 function processFullAuditRows(rows){
   purgeExpiredArchive();
   const archivedInfo=filterOutArchivedRows(rows,'Audit listă');
@@ -1202,7 +1273,8 @@ function processFullAuditRows(rows){
   const a=analyzeFullAudit(rows);
   pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
   renderParsedPreview(rows);
-  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
+  const changeSummary=auditPreviewChangeSummary(rows,a);
+  const active=changeSummary.active,brown=changeSummary.brown,red=changeSummary.red;
   const can=!!a.detected&&!a.ambiguous&&!a.oldTransferredExists;
   const entriesText=a.entries.length?a.entries.map(([id,c])=>`${empName(id)}: ${c}`).join('<br>'):'niciun număr cunoscut';
   let msg='Totul arată bine. Poți aplica.';let cls='ok';
@@ -1219,6 +1291,7 @@ function processFullAuditRows(rows){
     <div class="notice ${a.detected&&!a.ambiguous?'ok':'bad'}">Agent: <b>${a.detected?esc(empName(a.detected)):'nedetectat'}</b></div>
     ${summaryCards({active,brown,red,missing:a.missing.length,newCount:a.extra.length+a.willAddAssignment,conflict:a.conflicts})}
     <div class="big-status ${cls}">${esc(msg)}</div>
+    <div class="muted" style="margin:8px 0">Cardurile ACTIV / MARO / ROȘU arată doar ce se schimbă acum. Numerele deja setate anterior cu același status nu mai sunt contorizate.</div>
     ${can?'<button class="green" onclick="applyFullAudit()">Aplică modificările</button>':''}
     ${a.missing.length?`<h3>Vor deveni DISPĂRUT</h3><div class="notice bad">${a.missing.map(x=>`<div style="padding:6px 0;border-bottom:1px solid #fecaca"><b>${esc(x.client.phone)}</b>${x.client.note?` <span class="muted">| ${esc(x.client.note)}</span>`:''}</div>`).join('')}</div>`:''}
     <details class="details-box"><summary>Detalii</summary><div class="notice">
@@ -1243,6 +1316,7 @@ function applyFullAudit(){
   if(a.oldTransferredExists>0)return alert('Există numere care au fost deja transferate/istorice la acest agent. Verifică manual înainte.');
   const risk=auditRisk(a,rows);
   if(risk.risky && !confirm(`ATENȚIE: lista pare incompletă. Ai lipit ${risk.pasted} rânduri, dar erau ${risk.expected} numere așteptate în Sheet. ${risk.missing} vor deveni DISPĂRUT. Continui?`))return;
+  const changeSummary=auditPreviewChangeSummary(rows,a);
   createAutoBackup(`Înainte de audit listă pentru ${empName(a.detected)}`);
   let updated=0,addedClients=0,addedAssignments=0,changed=0,missingCount=0,conflicts=0;
   rows.forEach(r=>{
@@ -1281,7 +1355,7 @@ function applyFullAudit(){
     missingCount++;
   });
   pendingImport=null;save();renderParsedPreview(rows);
-  const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length,totalConflicts=db.clients.filter(clientHasConflict).length;
+  const active=changeSummary.active,brown=changeSummary.brown,red=changeSummary.red,totalConflicts=db.clients.filter(clientHasConflict).length;
   el('retReport').className='notice';
   el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Audit aplicat</h3>
     <div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>
@@ -1778,7 +1852,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!el('clientModalBac
 const modalBackdropInit=el('clientModalBackdrop');
 if(modalBackdropInit)modalBackdropInit.addEventListener('click',e=>{if(e.target===modalBackdropInit)closeClientModal()});
 
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['dash','agents','add','return','verify','transfer','transferHistory','backup'].forEach(t=>el('tab-'+t).classList.toggle('hidden',b.dataset.tab!==t));render();renderVerification();renderTransfer();renderTransferHistory();renderBackupInfo();previewDb()});
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');['dash','agents','add','return','verify','transfer','transferHistory','backup','archive'].forEach(t=>el('tab-'+t).classList.toggle('hidden',b.dataset.tab!==t));render();renderVerification();renderTransfer();renderTransferHistory();renderArchive();renderBackupInfo();previewDb()});
 render();
 renderVerification();
 renderTransfer();

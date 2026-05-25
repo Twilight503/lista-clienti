@@ -78,3 +78,9 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - `Audit listă` și `Adaugă numere` ignoră numerele deja arhivate
 - dacă un număr arhivat reapare, se notează în arhivă
 - din Arhivă poți `Reactivează` sau `Șterge definitiv`
+
+
+## Fix versiune
+- Arhiva se deschide corect din meniu.
+- În Audit listă, cardurile ACTIV/MARO/ROȘU contorizează doar schimbările noi, nu statusurile deja existente.
+- La salvare apare indicator cu rotiță și apoi bifă când update-ul a intrat în baza de date.

@@ -84,3 +84,9 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - Arhiva se deschide corect din meniu.
 - În Audit listă, cardurile ACTIV/MARO/ROȘU contorizează doar schimbările noi, nu statusurile deja existente.
 - La salvare apare indicator cu rotiță și apoi bifă când update-ul a intrat în baza de date.
+
+## Fix salvare calitativ
+- Am eliminat mesajul global care rămânea în josul paginii.
+- `save()` returnează promisiunea salvării în MongoDB.
+- La Audit listă și Adăugare numere, spinnerul rămâne în raport până răspunde serverul MongoDB.
+- După salvare reușită, spinnerul dispare și rămâne doar mesajul de succes.

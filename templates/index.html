@@ -118,7 +118,46 @@ body.modal-open{overflow:hidden}
 .card h2{letter-spacing:-.025em}
 .tab{box-shadow:0 6px 16px rgba(16,24,40,.04)}
 
-</style>
+
+    .save-spinner {
+      width: 15px;
+      height: 15px;
+      border: 2px solid rgba(37, 99, 235, 0.25);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spinSave 0.75s linear infinite;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .btn-save-indicator {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .inline-save-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .save-error-dot {
+      color: var(--red);
+      font-weight: 900;
+    }
+
+    @keyframes spinSave {
+      to { transform: rotate(360deg); }
+    }
+
+  </style>
 </head>
 <body>
 <header>
@@ -417,11 +456,6 @@ body.modal-open{overflow:hidden}
 </div>
 
 </main>
-<div id="saveStatusFixed" class="save-status-fixed">
-  <span class="save-spinner"></span>
-  <span id="saveStatusText">Se salvează...</span>
-</div>
-
 <script>
 window.__INITIAL_DB__ = {{ initial_db|tojson }};
 window.__INITIAL_REV__ = {{ rev|tojson }};
@@ -624,6 +658,7 @@ let lastActionButton = null;
 let lastButtonIndicator = null;
 let saveIndicatorTimer = null;
 let currentSaveContext = '';
+let currentPersistPromise = null;
 
 function setSaveContext(ctx){currentSaveContext=ctx||''}
 function clearInlineSaveContext(){
@@ -638,14 +673,9 @@ document.addEventListener('click', e=>{
 }, true);
 
 function setSaveVisual(state){
-  const fixed=el('saveStatusFixed');
-  const text=el('saveStatusText');
-  if(!fixed||!text)return;
   clearTimeout(saveIndicatorTimer);
 
   if(state==='saving'){
-    fixed.classList.add('show');
-    fixed.innerHTML='<span class="save-spinner"></span><span id="saveStatusText">Se salvează în baza de date...</span>';
     if(lastActionButton && document.body.contains(lastActionButton)){
       if(lastButtonIndicator)lastButtonIndicator.remove();
       lastButtonIndicator=document.createElement('span');
@@ -658,17 +688,18 @@ function setSaveVisual(state){
 
   if(state==='done'){
     saveIndicatorTimer=setTimeout(()=>{
-      fixed.classList.remove('show');
       if(lastButtonIndicator){lastButtonIndicator.remove();lastButtonIndicator=null}
       lastActionButton=null;
-    },150);
+    },250);
     return;
   }
 
   if(state==='error'){
-    fixed.classList.add('show');
-    fixed.innerHTML='<span class="save-error">!</span><span id="saveStatusText">Eroare la salvare</span>';
-    if(lastButtonIndicator)lastButtonIndicator.innerHTML='<span class="save-error">!</span>';
+    if(lastButtonIndicator)lastButtonIndicator.innerHTML='<span class="save-error-dot">!</span>';
+    saveIndicatorTimer=setTimeout(()=>{
+      if(lastButtonIndicator){lastButtonIndicator.remove();lastButtonIndicator=null}
+      lastActionButton=null;
+    },1800);
   }
 }
 
@@ -682,7 +713,7 @@ function save(){
   renderBackupInfo();
   previewDb();
   clearTimeout(saveTimer);
-  persistDb();
+  return persistDb();
 }
 
 function persistOnly(){
@@ -699,35 +730,54 @@ function schedulePersist(){
 }
 
 async function persistDb(){
-  if(isSaving){dirtyWhileSaving=true;return}
+  if(booting)return true;
+  if(isSaving){
+    dirtyWhileSaving=true;
+    return currentPersistPromise || Promise.resolve(true);
+  }
+
   isSaving=true;
   dirtyWhileSaving=false;
   setSaveVisual('saving');
-  try{
-    const res=await fetch('/api/state',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({db,rev:stateRev})
-    });
-    if(res.status===409){
-      alert('Baza a fost modificată de altcineva. Pagina se reîncarcă ca să nu suprascriem datele.');
-      location.reload();
-      return;
+
+  currentPersistPromise=(async()=>{
+    try{
+      const res=await fetch('/api/state',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({db,rev:stateRev})
+      });
+
+      if(res.status===409){
+        alert('Baza a fost modificată de altcineva. Pagina se reîncarcă pentru siguranță.');
+        location.reload();
+        return false;
+      }
+
+      if(!res.ok)throw new Error(await res.text());
+
+      const data=await res.json();
+      stateRev=data.rev;
+      clearInlineSaveContext();
+      setSaveVisual('done');
+      return true;
+    }catch(e){
+      console.error(e);
+      const pending=el('auditSavePending')||el('addSavePending');
+      if(pending)pending.innerHTML='<span class="save-error-dot">!</span> Eroare la salvare. Verifică internetul sau serverul Render.';
+      setSaveVisual('error');
+      alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
+      return false;
+    }finally{
+      isSaving=false;
+      const shouldRunAgain=dirtyWhileSaving;
+      dirtyWhileSaving=false;
+      currentPersistPromise=null;
+      if(shouldRunAgain)await persistDb();
     }
-    if(!res.ok)throw new Error(await res.text());
-    const data=await res.json();
-    stateRev=data.rev;
-    clearInlineSaveContext();
-    setSaveVisual('done');
-  }catch(e){
-    console.error(e);
-    clearInlineSaveContext();
-    setSaveVisual('error');
-    alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
-  }finally{
-    isSaving=false;
-    if(dirtyWhileSaving)schedulePersist();
-  }
+  })();
+
+  return currentPersistPromise;
 }
 function activeEmployees(){return db.employees.filter(e=>!e.deleted)}
 function norm(v){
@@ -1003,7 +1053,7 @@ function processAddRows(rows){
       Apariții noi la agent: ${newAssignments}
     </div></details>`;
 }
-function applyPartialAdd(){
+async function applyPartialAdd(){
   if(!pendingAdd)return alert('Nu există adăugare pregătită.');
   setSaveContext('add');
   const {agentId,rows}=pendingAdd;
@@ -1040,7 +1090,6 @@ function applyPartialAdd(){
     if(clientHasConflict(c))conflicts++;
   });
   pendingAdd=null;
-  save();
   renderAddParsedPreview(rows,agentId);
   const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
   el('entryReport').className='notice';
@@ -1048,6 +1097,7 @@ function applyPartialAdd(){
     <div class="notice ok">Agent: <b>${esc(empName(agentId))}</b></div>
     ${summaryCards({active,brown,red,missing:0,newCount:addedAssignments,conflict:conflicts})}
     <div class="big-status ok">Modificările au fost aplicate. Nu s-au verificat numere dispărute.</div>
+    <div id="addSavePending" class="inline-save-status"><span class="save-spinner"></span>Se salvează în baza de date...</div>
     <details class="details-box"><summary>Detalii</summary><div class="notice">
       Verificate: ${updated}<br>
       Clienți noi creați: ${addedClients}<br>
@@ -1056,6 +1106,7 @@ function applyPartialAdd(){
       Conflicte după update: ${conflicts}<br>
       <span class="muted">Notă: un client nou este numărat o singură dată la NOI, chiar dacă i se creează și apariția la agent.</span>
     </div></details>`;
+  await save();
 }
 function renderAddParsedPreview(rows,agentId){
   const tbody=el('addParsedPreview');
@@ -1318,7 +1369,7 @@ function processFullAuditRows(rows){
 function applyPendingImport(){
   applyFullAudit();
 }
-function applyFullAudit(){
+async function applyFullAudit(){
   if(!pendingImport)return alert('Nu există import pregătit.');
   setSaveContext('audit');
   const rows=pendingImport.rows,a=analyzeFullAudit(rows);
@@ -1364,15 +1415,17 @@ function applyFullAudit(){
     x.client.history.push({date:now(),text:`La ${empName(a.detected)}: nu s-a regăsit în lista completă. Mutat la DISPARUT.`});
     missingCount++;
   });
-  pendingImport=null;save();renderParsedPreview(rows);
+  pendingImport=null;
+  renderParsedPreview(rows);
   const active=changeSummary.active,brown=changeSummary.brown,red=changeSummary.red,totalConflicts=db.clients.filter(clientHasConflict).length;
   el('retReport').className='notice';
   el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Audit aplicat</h3>
     <div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>
     ${summaryCards({active,brown,red,missing:missingCount,newCount:addedAssignments,conflict:totalConflicts})}
     <div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div>
-    <div id="auditSavePending" class="muted" style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="save-spinner"></span>Se salvează în baza de date...</div>
+    <div id="auditSavePending" class="inline-save-status"><span class="save-spinner"></span>Se salvează în baza de date...</div>
     <details class="details-box"><summary>Detalii</summary><div class="notice">Verificate/lipite: ${updated}<br>Clienți noi: ${addedClients}<br>Apariții noi la agent: ${addedAssignments}<br>Status/stare Sheet schimbate: ${changed}<br>Dispărute: ${missingCount}</div></details>`;
+  await save();
 }
 function renderParsedPreview(rows){
   el('parsedPreview').innerHTML=rows.length?rows.map((r,i)=>{

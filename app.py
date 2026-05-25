@@ -1,7 +1,7 @@
 import os
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from functools import wraps
 
 from bson import json_util
@@ -39,7 +39,34 @@ def empty_state():
         "deletedRecords": [],
         "transfers": [],
         "backups": [],
+        "archivedClients": [],
     }
+
+
+def _parse_iso(dt):
+    if not dt or not isinstance(dt, str):
+        return None
+    try:
+        return datetime.fromisoformat(dt.replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
+def purge_expired_archived_clients(items):
+    now_utc = datetime.now(timezone.utc)
+    kept = []
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        archived_at = _parse_iso(item.get("archivedAt")) or now_utc
+        delete_at = _parse_iso(item.get("deleteAt")) or (archived_at + timedelta(days=90))
+        if delete_at <= now_utc:
+            continue
+        item["archivedAt"] = archived_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        item["deleteAt"] = delete_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        item.setdefault("history", [])
+        kept.append(item)
+    return kept
 
 
 def sanitize_state(state):
@@ -53,9 +80,11 @@ def sanitize_state(state):
     state.setdefault("deletedEmployeeNames", {})
     state.setdefault("clients", [])
     state.setdefault("transfers", [])
+    state.setdefault("archivedClients", [])
 
     # Nu păstrăm arhivă de ștergeri în Mongo. Ștergerile sunt definitive în UI.
     state["deletedRecords"] = []
+    state["archivedClients"] = purge_expired_archived_clients(state.get("archivedClients", []))
 
     # Backup-urile automate sunt copii complete; păstrăm doar ultimele 3 ca să nu umfle baza.
     backups = state.get("backups", [])
@@ -84,6 +113,8 @@ def public_state(doc):
     state.setdefault("deletedRecords", [])
     state.setdefault("transfers", [])
     state.setdefault("backups", [])
+    state.setdefault("archivedClients", [])
+    state["archivedClients"] = purge_expired_archived_clients(state.get("archivedClients", []))
 
     state = sanitize_state(state)
     return clean_for_json(state), rev

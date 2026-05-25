@@ -69,3 +69,12 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - În tabelul `Ce a citit` există buton `Elimină`.
 - Dacă elimini un rând, preview-ul și cardurile de sus se recalculează imediat.
 - Contorul `NOI` după aplicare nu mai dublează client nou + apariție nouă.
+
+
+## Arhivă
+- tab nou `Arhivă` în loc de `Logout`
+- numerele arhivate rămân 90 zile
+- după 90 zile se șterg automat definitiv
+- `Audit listă` și `Adaugă numere` ignoră numerele deja arhivate
+- dacă un număr arhivat reapare, se notează în arhivă
+- din Arhivă poți `Reactivează` sau `Șterge definitiv`

@@ -139,7 +139,7 @@ body.modal-open{overflow:hidden}
   <button class="tab" data-tab="transfer">Transfer MARO</button>
   <button class="tab" data-tab="transferHistory">Istoric transferuri</button>
   <button class="tab" data-tab="backup">Backup</button>
-  <button class="tab" onclick="location.href=\'/logout\'" type="button">Logout</button>
+  <button class="tab" data-tab="archive">Arhivă</button>
 </div>
 
 
@@ -310,6 +310,36 @@ body.modal-open{overflow:hidden}
   </div>
 </section>
 
+
+<section id="tab-archive" class="hidden">
+  <div class="grid">
+    <div class="card c4">
+      <h2>Arhivă</h2>
+      <p class="muted">Aici ajung numerele verificate și arhivate. Stau 3 luni, apoi se șterg automat definitiv.</p>
+      <input id="archiveSearch" placeholder="Caută în arhivă..." oninput="renderArchive()">
+      <div id="archiveInfo" class="notice"></div>
+    </div>
+    <div class="card c8">
+      <h2>Numere arhivate</h2>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Telefon</th>
+              <th>Arhivat la</th>
+              <th>Ștergere automată</th>
+              <th>Ultima reapariție</th>
+              <th>Istoric</th>
+              <th>Acțiuni</th>
+            </tr>
+          </thead>
+          <tbody id="archiveRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="tab-backup" class="hidden">
   <div class="grid">
     <div class="card c6">
@@ -362,7 +392,7 @@ body.modal-open{overflow:hidden}
           <label>Motiv / feedback</label>
           <textarea id="modalManualNote" style="min-height:90px;font-family:Arial,sans-serif" placeholder="Ex: clientul a revenit, îl lucrez eu acum"></textarea>
           <button onclick="applyManualAction()">Salvează acțiunea</button>
-          <button class="red" onclick="archiveClientFromModal()" style="margin-top:8px">Șterge peste tot</button>
+          <button class="brown" onclick="archiveClientFromModal()" style="margin-top:8px">Arhivează verificat</button>
         </div>
       </div>
 
@@ -400,6 +430,134 @@ function el(id){return document.getElementById(id)}
 function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8)}
 function now(){return new Date().toLocaleString('ro-RO')}
 
+function addDaysIso(dateIso,days){const d=new Date(dateIso||new Date().toISOString());d.setDate(d.getDate()+days);return d.toISOString()}
+function daysLeftText(deleteAt){
+  const ms=new Date(deleteAt).getTime()-Date.now();
+  const d=Math.ceil(ms/86400000);
+  if(d<=0)return 'expiră acum';
+  if(d===1)return '1 zi';
+  return d+' zile';
+}
+function normalizeArchived(entry){
+  if(!entry||!entry.phone)return null;
+  const archivedAt=entry.archivedAt||new Date().toISOString();
+  return {
+    id:entry.id||uid('arc'),
+    phone:norm(entry.phone),
+    note:entry.note||'',
+    reason:entry.reason||'Arhivat manual',
+    archivedAt,
+    deleteAt:entry.deleteAt||addDaysIso(archivedAt,90),
+    history:Array.isArray(entry.history)?entry.history:[],
+    assignmentsSnapshot:Array.isArray(entry.assignmentsSnapshot)?entry.assignmentsSnapshot:[],
+    clientHistory:Array.isArray(entry.clientHistory)?entry.clientHistory:[],
+    lastReappearedAt:entry.lastReappearedAt||'',
+    lastReappearedSource:entry.lastReappearedSource||'',
+    reappearCount:Number(entry.reappearCount||0),
+    feedbackSummary:entry.feedbackSummary||'',
+    noAnswerTotal:Number(entry.noAnswerTotal||0)
+  };
+}
+function purgeExpiredArchive(){
+  db.archivedClients=(db.archivedClients||[]).map(normalizeArchived).filter(Boolean);
+  const nowTs=Date.now();
+  db.archivedClients=db.archivedClients.filter(a=>new Date(a.deleteAt).getTime()>nowTs);
+}
+function archivedByPhone(phone){
+  const p=norm(phone);
+  return (db.archivedClients||[]).find(x=>norm(x.phone)===p)||null;
+}
+function recordArchivedReappearance(row,sourceLabel){
+  const arc=archivedByPhone(row.phone);
+  if(!arc)return false;
+  arc.lastReappearedAt=new Date().toISOString();
+  arc.lastReappearedSource=sourceLabel||'Import';
+  arc.reappearCount=Number(arc.reappearCount||0)+1;
+  arc.history=arc.history||[];
+  arc.history.push({date:now(),text:`A reapărut prin ${sourceLabel||'Import'} cu status ${stxt(row.status)}.`});
+  return true;
+}
+function filterOutArchivedRows(rows,sourceLabel){
+  const kept=[]; let skipped=0;
+  (rows||[]).forEach(r=>{
+    if(!r||!r.phone)return;
+    if(recordArchivedReappearance(r,sourceLabel)){skipped++;return;}
+    kept.push(r);
+  });
+  return {rows:kept,skipped};
+}
+function archiveClientById(clientId,reason){
+  const c=db.clients.find(x=>x.id===clientId);
+  if(!c)return;
+  if(!confirm(`Arhivezi numărul ${c.phone}? Va fi scos din listele active și păstrat 3 luni în Arhivă.`))return;
+  let arc=archivedByPhone(c.phone);
+  const entry=normalizeArchived(arc||{phone:c.phone,note:c.note||'',reason:reason||'Arhivat din Verificare'});
+  entry.note=c.note||entry.note||'';
+  entry.reason=reason||entry.reason||'Arhivat din Verificare';
+  entry.archivedAt=new Date().toISOString();
+  entry.deleteAt=addDaysIso(entry.archivedAt,90);
+  entry.assignmentsSnapshot=clone(c.assignments||[]);
+  entry.clientHistory=clone(c.history||[]);
+  entry.feedbackSummary=(c.assignments||[]).filter(a=>a.feedback).map(a=>`${empName(a.agentId)}: ${a.feedback}`).join(' | ');
+  entry.noAnswerTotal=(c.assignments||[]).reduce((s,a)=>s+(Number(a.noAnswerCount)||0),0);
+  entry.history=entry.history||[];
+  entry.history.push({date:now(),text:`Arhivat. Apariții active: ${(c.assignments||[]).map(a=>`${empName(a.agentId)} ${stxt(a.status)}`).join(', ')||'—'}.`});
+  if(arc){
+    const idx=(db.archivedClients||[]).findIndex(x=>norm(x.phone)===norm(c.phone));
+    if(idx>-1)db.archivedClients[idx]=entry;
+  }else{
+    db.archivedClients=db.archivedClients||[];
+    db.archivedClients.unshift(entry);
+  }
+  db.clients=db.clients.filter(x=>x.id!==c.id);
+  return true;
+}
+function archiveClientFromVerification(clientId){
+  const ok=archiveClientById(clientId,'Arhivat din Verificare');
+  if(ok)save();
+}
+function reactivateArchived(phone){
+  const arc=archivedByPhone(phone);
+  if(!arc){alert('Nu găsesc numărul în arhivă.');return}
+  if(!db.employees.length){alert('Nu există agenți disponibili.');return}
+  const defaultAgent=(arc.assignmentsSnapshot||[]).find(a=>a.agentId)?.agentId || db.employees[0].id;
+  const chosen=prompt('Introdu ID-ul agentului la care reactivezi numărul:\n' + db.employees.map(e=>`${e.id} = ${e.name}`).join('\n'), defaultAgent||'');
+  if(!chosen)return;
+  const emp=db.employees.find(e=>e.id===chosen);
+  if(!emp){alert('Agent invalid.');return}
+  const archivedIndex=(db.archivedClients||[]).findIndex(x=>norm(x.phone)===norm(phone));
+  const oldAs=(arc.assignmentsSnapshot||[]).filter(a=>a.agentId===chosen)[0];
+  const newClient={
+    id:uid('cli'),
+    phone:norm(arc.phone),
+    note:arc.note||'',
+    createdAt:new Date().toISOString(),
+    history:[...(arc.clientHistory||[]),{date:now(),text:`Reactivat din arhivă la ${emp.name}.`}],
+    assignments:[{
+      id:uid('as'),
+      agentId:chosen,
+      status:'active',
+      inSheet:true,
+      createdAt:new Date().toISOString(),
+      lastVerifiedAt:new Date().toISOString(),
+      noAnswerCount:Number(oldAs?.noAnswerCount||0),
+      feedback:oldAs?.feedback||'',
+      history:[{date:now(),text:'Reactivat din arhivă.'}]
+    }]
+  };
+  db.clients.push(newClient);
+  if(archivedIndex>-1)db.archivedClients.splice(archivedIndex,1);
+  save();
+}
+function deleteArchivedForever(phone){
+  const arc=archivedByPhone(phone);
+  if(!arc)return;
+  if(!confirm(`Ștergi definitiv din arhivă numărul ${phone}?`))return;
+  db.archivedClients=(db.archivedClients||[]).filter(x=>norm(x.phone)!==norm(phone));
+  save();
+}
+
+
 function actor(){return ''}
 function actorText(text){return text}
 
@@ -421,7 +579,7 @@ function loadDb(){
   }catch(e){
     console.error(e);
     alert('Nu am putut încărca baza din MongoDB.');
-    return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[]};
+    return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[],archivedClients:[]};
   }
 }
 function normalizeDb(data){
@@ -431,6 +589,7 @@ function normalizeDb(data){
   data.deletedRecords=[];
   data.transfers=data.transfers||[];
   data.backups=(data.backups||[]).slice(-3);
+  data.archivedClients=(data.archivedClients||[]).map(normalizeArchived).filter(Boolean);
   data.clients=data.clients.map(c=>{
     if(Array.isArray(c.assignments)){
       c.assignments=c.assignments.map(a=>({noAnswerCount:0,feedback:'',history:[],inSheet:(a.status==='active' && !a.transferredAt),...a}));
@@ -447,6 +606,8 @@ function normalizeDb(data){
       }]:[]
     };
   });
+  const nowTs=Date.now();
+  data.archivedClients=data.archivedClients.filter(a=>new Date(a.deleteAt).getTime()>nowTs);
   return data;
 }
 function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing','safe'].includes(s)?s:'active'}
@@ -457,16 +618,20 @@ let dirtyWhileSaving = false;
 let booting = true;
 
 function save(){
+  purgeExpiredArchive();
   render();
   renderVerification();
   renderTransfer();
   renderTransferHistory();
+  renderArchive();
   renderBackupInfo();
   previewDb();
   schedulePersist();
 }
 
 function persistOnly(){
+  purgeExpiredArchive();
+  renderArchive();
   previewDb();
   schedulePersist();
 }
@@ -753,7 +918,7 @@ function processAddRows(rows){
   if(!rows.length){
     pendingAdd=null;
     el('entryReport').className='notice bad';
-    el('entryReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';
+    el('entryReport').textContent='Nu am găsit numere valide sau toate numerele găsite sunt deja în arhivă.';
     return;
   }
   const active=rows.filter(x=>x.status==='active').length;
@@ -1030,7 +1195,10 @@ function auditRisk(a, rows){
   return{expected,missing,pasted,missingRate,pastedRate,risky};
 }
 function processFullAuditRows(rows){
-  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';return}
+  purgeExpiredArchive();
+  const archivedInfo=filterOutArchivedRows(rows,'Audit listă');
+  rows=archivedInfo.rows;
+  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide sau toate numerele găsite sunt deja în arhivă.';return}
   const a=analyzeFullAudit(rows);
   pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
   renderParsedPreview(rows);
@@ -1243,10 +1411,9 @@ function deleteAssignmentFromModal(asId){
   if(currentModalClientId)renderClientModal();
 }
 function archiveClientFromModal(){
-  const c=db.clients.find(x=>x.id===currentModalClientId);
-  if(!c)return;
-  if(!confirm(`Ștergi peste tot numărul ${c.phone} din baza activă?`))return;
-  db.clients=db.clients.filter(x=>x.id!==c.id);
+  if(!currentModalClientId)return;
+  const ok=archiveClientById(currentModalClientId,'Arhivat din Edit / Istoric');
+  if(!ok)return;
   closeClientModal();
   save();
 }
@@ -1333,8 +1500,9 @@ function renderVerification(){
       <td>${noAnswerControls}</td>
       <td>${feedbackControls}</td>
       <td>
-        <button class="small" onclick="openClientModal('${c.id}')">Edit / Istoric</button><br>
-        <button class="small secondary" onclick="deleteClientForever('${c.id}')" style="margin-top:6px">Șterge peste tot</button>
+        <button class="small brown" onclick="archiveClientFromVerification('${c.id}')">Arhivează</button><br>
+        <button class="small" onclick="openClientModal('${c.id}')" style="margin-top:6px">Edit / Istoric</button><br>
+        <button class="small secondary" onclick="deleteClientForever('${c.id}')" style="margin-top:6px">Șterge definitiv</button>
       </td>
     </tr>`;
   }).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
@@ -1546,6 +1714,39 @@ function restoreBackup(id){
   db={...clone(b.data),deletedRecords:[],backups:keep};
   save();
 }
+
+function renderArchive(){
+  purgeExpiredArchive();
+  const q=clean(el('archiveSearch')?.value||'');
+  let rows=(db.archivedClients||[]).slice().sort((a,b)=>new Date(b.archivedAt)-new Date(a.archivedAt));
+  if(q){
+    rows=rows.filter(a=>clean([
+      a.phone,a.note,a.reason,a.lastReappearedSource,
+      (a.history||[]).map(h=>h.text).join(' '),
+      (a.assignmentsSnapshot||[]).map(x=>empName(x.agentId)+' '+stxt(x.status)).join(' ')
+    ].join(' ')).includes(q));
+  }
+  const activeReappeared=rows.filter(a=>a.lastReappearedAt).length;
+  el('archiveInfo').innerHTML=`În arhivă: <b>${rows.length}</b> numere | Reapărute după arhivare: <b>${activeReappeared}</b> | Ștergere automată: <b>90 zile</b>`;
+  el('archiveRows').innerHTML=rows.length?rows.map(a=>{
+    const hist=[
+      ...(a.assignmentsSnapshot||[]).map(x=>`${empName(x.agentId)}: ${stxt(x.status)}`),
+      ...(a.history||[]).slice(-3).map(h=>`${h.date} — ${h.text}`)
+    ];
+    return `<tr>
+      <td><div class="phone">${esc(a.phone)}</div>${a.note?`<div class="muted">${esc(a.note)}</div>`:''}</td>
+      <td>${esc(new Date(a.archivedAt).toLocaleString('ro-RO'))}<div class="muted">${esc(a.reason||'')}</div></td>
+      <td><span class="pill gray">${esc(new Date(a.deleteAt).toLocaleDateString('ro-RO'))}</span><div class="muted">${esc(daysLeftText(a.deleteAt))}</div></td>
+      <td>${a.lastReappearedAt?`<div class="muted">${esc(new Date(a.lastReappearedAt).toLocaleString('ro-RO'))}</div><div class="pill blue">${esc(a.lastReappearedSource||'Reapărut')}</div>`:'—'}</td>
+      <td>${hist.length?hist.map(x=>`<div class="muted">${esc(x)}</div>`).join(''):'—'}</td>
+      <td>
+        <button class="small" onclick="reactivateArchived('${a.phone}')">Reactivează</button><br>
+        <button class="small secondary" onclick="deleteArchivedForever('${a.phone}')" style="margin-top:6px">Șterge definitiv</button>
+      </td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="6" class="muted">Nu există numere arhivate.</td></tr>';
+}
+
 function renderBackupInfo(){
   const box=el('backupInfo');if(!box)return;
   const rows=(db.backups||[]).slice().reverse();
@@ -1582,6 +1783,7 @@ render();
 renderVerification();
 renderTransfer();
 renderTransferHistory();
+renderArchive();
 renderBackupInfo();
 previewDb();
 booting=false;

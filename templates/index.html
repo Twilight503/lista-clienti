@@ -623,6 +623,14 @@ let booting = true;
 let lastActionButton = null;
 let lastButtonIndicator = null;
 let saveIndicatorTimer = null;
+let currentSaveContext = '';
+
+function setSaveContext(ctx){currentSaveContext=ctx||''}
+function clearInlineSaveContext(){
+  const ids=['auditSavePending','addSavePending'];
+  ids.forEach(id=>{const x=el(id); if(x) x.remove()});
+  currentSaveContext='';
+}
 
 document.addEventListener('click', e=>{
   const b=e.target.closest('button');
@@ -649,14 +657,11 @@ function setSaveVisual(state){
   }
 
   if(state==='done'){
-    fixed.classList.add('show');
-    fixed.innerHTML='<span class="save-check">✓</span><span id="saveStatusText">Salvat în baza de date</span>';
-    if(lastButtonIndicator)lastButtonIndicator.innerHTML='<span class="save-check">✓</span>';
     saveIndicatorTimer=setTimeout(()=>{
       fixed.classList.remove('show');
       if(lastButtonIndicator){lastButtonIndicator.remove();lastButtonIndicator=null}
       lastActionButton=null;
-    },1200);
+    },150);
     return;
   }
 
@@ -676,7 +681,8 @@ function save(){
   renderArchive();
   renderBackupInfo();
   previewDb();
-  schedulePersist();
+  clearTimeout(saveTimer);
+  persistDb();
 }
 
 function persistOnly(){
@@ -711,9 +717,11 @@ async function persistDb(){
     if(!res.ok)throw new Error(await res.text());
     const data=await res.json();
     stateRev=data.rev;
+    clearInlineSaveContext();
     setSaveVisual('done');
   }catch(e){
     console.error(e);
+    clearInlineSaveContext();
     setSaveVisual('error');
     alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
   }finally{
@@ -997,6 +1005,7 @@ function processAddRows(rows){
 }
 function applyPartialAdd(){
   if(!pendingAdd)return alert('Nu există adăugare pregătită.');
+  setSaveContext('add');
   const {agentId,rows}=pendingAdd;
   createAutoBackup(`Înainte de adăugare/update parțial la ${empName(agentId)}`);
   let addedClients=0,addedAssignments=0,updated=0,changed=0,conflicts=0;
@@ -1311,6 +1320,7 @@ function applyPendingImport(){
 }
 function applyFullAudit(){
   if(!pendingImport)return alert('Nu există import pregătit.');
+  setSaveContext('audit');
   const rows=pendingImport.rows,a=analyzeFullAudit(rows);
   if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
   if(a.oldTransferredExists>0)return alert('Există numere care au fost deja transferate/istorice la acest agent. Verifică manual înainte.');
@@ -1361,6 +1371,7 @@ function applyFullAudit(){
     <div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>
     ${summaryCards({active,brown,red,missing:missingCount,newCount:addedAssignments,conflict:totalConflicts})}
     <div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div>
+    <div id="auditSavePending" class="muted" style="display:flex;align-items:center;gap:8px;margin-top:10px"><span class="save-spinner"></span>Se salvează în baza de date...</div>
     <details class="details-box"><summary>Detalii</summary><div class="notice">Verificate/lipite: ${updated}<br>Clienți noi: ${addedClients}<br>Apariții noi la agent: ${addedAssignments}<br>Status/stare Sheet schimbate: ${changed}<br>Dispărute: ${missingCount}</div></details>`;
 }
 function renderParsedPreview(rows){

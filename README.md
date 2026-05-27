@@ -90,3 +90,15 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - `save()` returnează promisiunea salvării în MongoDB.
 - La Audit listă și Adăugare numere, spinnerul rămâne în raport până răspunde serverul MongoDB.
 - După salvare reușită, spinnerul dispare și rămâne doar mesajul de succes.
+
+## Fix logică arhivă / audit
+
+- Arhiva nu mai blochează global numerele.
+- Dacă un număr arhivat reapare în Audit sau Adaugă numere, este reactivat și istoricul vechi se păstrează.
+- Dacă un număr a mai fost la agent și revine după transfer/istoric, aplicația permite adăugarea, dar afișează atenționare.
+- În Audit, rândurile problematice apar primele în `Ce a citit`.
+- Raportul de audit are secțiune `Atenții importante`.
+
+## Fix sintaxă
+- Corectat dublarea accidentală `async async` pe funcțiile de aplicare.
+- Verificat cu `node --check` după generare.

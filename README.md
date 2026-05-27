@@ -109,3 +109,10 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - Repară cazul în care un număr se vedea în zona lipită, dar nu apărea în tabelul `Ce a citit`.
 - Numerele arhivate nu sunt ignorate; dacă sunt citite, apar în preview și se reactivează la aplicare.
 - Eliminarea din preview se face după telefon, nu după indexul sortat.
+
+## Fix atenționări repetate
+
+- Atenționările de tip `ACTIV LA ALT AGENT`, `REAPĂRUT DIN ARHIVĂ`, `A MAI FOST LA AGENT` și `CONFLICT POSIBIL` se memorează după aplicare.
+- La următoarele audituri, aceeași atenționare pentru același telefon/agent nu mai apare.
+- Dacă situația se schimbă, de exemplu apare alt agent activ sau alt conflict, apare din nou.
+- `SE SCHIMBĂ STATUSUL` rămâne vizibil când există o schimbare reală nouă.

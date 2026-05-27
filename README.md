@@ -116,3 +116,8 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 - La următoarele audituri, aceeași atenționare pentru același telefon/agent nu mai apare.
 - Dacă situația se schimbă, de exemplu apare alt agent activ sau alt conflict, apare din nou.
 - `SE SCHIMBĂ STATUSUL` rămâne vizibil când există o schimbare reală nouă.
+
+## Fix contor Verificare
+
+- Contorul din Dashboard pentru `Verificare` nu mai numără MARO simplu.
+- Acum numără doar telefoane unice care chiar intră în Verificare: ROȘU, DISPĂRUT, CONFLICT sau MARO epuizat.

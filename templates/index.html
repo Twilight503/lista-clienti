@@ -1071,7 +1071,10 @@ function renderStats(){
   const inSheet=apps.filter(a=>a.inSheet!==false).length;
   const active=apps.filter(a=>a.status==='active').length,brown=apps.filter(a=>a.status==='brown').length,red=apps.filter(a=>a.status==='red').length,missing=apps.filter(a=>a.status==='missing').length,safe=apps.filter(a=>a.status==='safe').length;
   const conflicts=db.clients.filter(clientHasConflict).length;
-  const verify=apps.filter(a=>['brown','red','missing'].includes(a.status)).length+conflicts;
+  const verify=db.clients.filter(c=>{
+    const activeAs=activeAssignments(c);
+    return clientHasConflict(c) || activeAs.some(a=>['red','missing'].includes(a.status) || isBrownExhausted(c,a));
+  }).length;
   el('stats').innerHTML=[
     ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
   ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');

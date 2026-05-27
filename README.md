@@ -102,3 +102,10 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 ## Fix sintaxă
 - Corectat dublarea accidentală `async async` pe funcțiile de aplicare.
 - Verificat cu `node --check` după generare.
+
+## Fix citire paste audit
+
+- `Audit listă` combină acum clipboard HTML, DOM-ul efectiv din zona lipită și textul plain.
+- Repară cazul în care un număr se vedea în zona lipită, dar nu apărea în tabelul `Ce a citit`.
+- Numerele arhivate nu sunt ignorate; dacă sunt citite, apar în preview și se reactivează la aplicare.
+- Eliminarea din preview se face după telefon, nu după indexul sortat.

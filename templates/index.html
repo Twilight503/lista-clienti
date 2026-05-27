@@ -250,7 +250,7 @@ body.modal-open{overflow:hidden}
     <div class="card c7">
       <h2>Raport adăugare / actualizare</h2>
       <div id="entryReport" class="notice">Încă nu ai adăugat numere.</div>
-      <h3>Ce a citit</h3><p class="muted" style="margin-top:-6px">Poți elimina rânduri înainte să aplici; rezumatul se recalculează automat.</p>
+      <h3>Ce a citit</h3><p class="muted" style="margin-top:-6px">Citesc atât clipboard-ul colorat, cât și ce se vede efectiv în zona lipită. Dacă un număr este arhivat, apare aici și se poate reactiva la aplicare.</p><p class="muted" style="margin-top:-6px">Poți elimina rânduri înainte să aplici; rezumatul se recalculează automat.</p>
       <div class="scroll" style="max-height:260px">
         <table><thead><tr><th>Telefon</th><th>Status</th><th>Culoare</th><th>Existent</th></tr></thead><tbody id="addParsedPreview"></tbody></table>
       </div>
@@ -516,13 +516,139 @@ function recordArchivedReappearance(row,sourceLabel){
   return true;
 }
 function filterOutArchivedRows(rows,sourceLabel){
-  const kept=[]; let skipped=0;
+  // Arhiva NU mai este blacklist global.
+  // Numerele arhivate trebuie să poată reapărea la alt agent sau chiar la același agent.
+  return {rows:(rows||[]).filter(r=>r&&r.phone),skipped:0};
+}
+
+function auditRowIssues(row,detectedAgentId){
+  const issues=[];
+  const c=clientByPhone(row.phone);
+  const arc=archivedByPhone(row.phone);
+
+  if(arc){
+    issues.push({type:'archive',label:'REAPĂRUT DIN ARHIVĂ',score:120});
+  }
+
+  if(detectedAgentId && c){
+    const activeAs=activeAssignments(c);
+    const as=assignmentOf(c,detectedAgentId);
+    const anyAtAgent=assignmentOfAny(c,detectedAgentId);
+
+    if(anyAtAgent && !as){
+      issues.push({type:'history',label:'A MAI FOST LA AGENT',score:95});
+    }
+
+    const otherActiveAgents=activeAs.filter(a=>a.agentId!==detectedAgentId && a.status==='active');
+    if(otherActiveAgents.length){
+      issues.push({type:'active_other',label:'ACTIV LA ALT AGENT',score:90});
+    }
+
+    const statuses=activeAs.map(a=>a.agentId===detectedAgentId?row.status:a.status);
+    if(!as)statuses.push(row.status);
+
+    const conflict=statuses.length>1 &&
+      statuses.some(s=>s==='red'||s==='missing') &&
+      statuses.some(s=>s==='active'||s==='brown');
+
+    if(conflict){
+      issues.push({type:'conflict',label:'CONFLICT POSIBIL',score:110});
+    }
+
+    if(as && as.status!=='safe'){
+      const sheetTarget=row.status==='active';
+      if(as.status!==row.status || as.inSheet!==sheetTarget){
+        issues.push({type:'change',label:'SE SCHIMBĂ STATUSUL',score:60});
+      }
+    }
+  }
+
+  return issues.sort((a,b)=>b.score-a.score);
+}
+
+function issueBadgesHtml(row,detectedAgentId){
+  const issues=auditRowIssues(row,detectedAgentId);
+  return issues.length?`<div style="margin-top:5px">${issues.map(x=>`<span class="pill ${x.type==='archive'?'purple':x.type==='conflict'?'red':x.type==='active_other'?'orange':'blue'}">${esc(x.label)}</span>`).join('')}</div>`:'';
+}
+
+function sortedAuditRows(rows,detectedAgentId){
+  return (rows||[]).map((r,i)=>({r,i,score:(auditRowIssues(r,detectedAgentId)[0]?.score||0)}))
+    .sort((a,b)=>b.score-a.score || a.i-b.i)
+    .map(x=>x.r);
+}
+
+function auditIssuesSummary(rows,a){
+  const detected=a?.detected||'';
+  const counts={archive:0,history:0,active_other:0,conflict:0,change:0};
   (rows||[]).forEach(r=>{
-    if(!r||!r.phone)return;
-    if(recordArchivedReappearance(r,sourceLabel)){skipped++;return;}
-    kept.push(r);
+    const seen=new Set();
+    auditRowIssues(r,detected).forEach(i=>{
+      if(counts[i.type]!==undefined && !seen.has(i.type)){counts[i.type]++;seen.add(i.type)}
+    });
   });
-  return {rows:kept,skipped};
+  return counts;
+}
+
+function auditIssuesBlock(rows,a){
+  const detected=a?.detected||'';
+  const problematic=sortedAuditRows(rows,detected).filter(r=>auditRowIssues(r,detected).length);
+  if(!problematic.length)return '';
+
+  const counts=auditIssuesSummary(rows,a);
+  return `<h3>Atenții importante</h3>
+    <div class="notice warn">
+      <b>Verifică aceste numere înainte să aplici.</b><br>
+      Reapărute din arhivă: <b>${counts.archive}</b> |
+      Au mai fost la agent: <b>${counts.history}</b> |
+      Active la alt agent: <b>${counts.active_other}</b> |
+      Conflicte posibile: <b>${counts.conflict}</b> |
+      Status schimbat: <b>${counts.change}</b>
+      <div style="margin-top:8px;max-height:170px;overflow:auto;border-top:1px solid #fed7aa;padding-top:6px">
+        ${problematic.slice(0,40).map(r=>`<div style="padding:6px 0;border-bottom:1px solid #fed7aa"><b>${esc(r.phone)}</b> ${issueBadgesHtml(r,detected)}</div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function reviveArchivedClientForImport(row,agentId,sourceLabel){
+  const arc=archivedByPhone(row.phone);
+  if(!arc)return null;
+
+  const archivedIndex=(db.archivedClients||[]).findIndex(x=>norm(x.phone)===norm(row.phone));
+  const client={
+    id:uid('cli'),
+    phone:norm(arc.phone),
+    note:arc.note||'',
+    createdAt:new Date().toISOString(),
+    history:[
+      ...(arc.clientHistory||[]),
+      ...(arc.history||[]).map(h=>({date:h.date||now(),text:`Arhivă: ${h.text||''}`})),
+      {date:now(),text:`Reapărut din arhivă prin ${sourceLabel||'import'} la ${empName(agentId)}. Istoricul vechi a fost păstrat.`}
+    ],
+    assignments:[]
+  };
+
+  db.clients.push(client);
+  if(archivedIndex>-1)db.archivedClients.splice(archivedIndex,1);
+  return client;
+}
+
+function getOrCreateClientForImport(row,agentId,defaultNote,sourceLabel){
+  let c=clientByPhone(row.phone);
+  if(c)return {client:c,created:false,fromArchive:false};
+
+  const revived=reviveArchivedClientForImport(row,agentId,sourceLabel);
+  if(revived)return {client:revived,created:false,fromArchive:true};
+
+  c={
+    id:uid('cli'),
+    phone:norm(row.phone),
+    note:defaultNote||'',
+    createdAt:new Date().toISOString(),
+    history:[],
+    assignments:[]
+  };
+  db.clients.push(c);
+  return {client:c,created:true,fromArchive:false};
 }
 function archiveClientById(clientId,reason){
   const c=db.clients.find(x=>x.id===clientId);
@@ -1016,8 +1142,13 @@ function clearAddPasteBox(){
   if(el('entryReport'))el('entryReport').innerHTML='Încă nu ai adăugat numere.';
 }
 function processAddPasteBox(){
-  let rows=parseColoredHtml(lastAddHtmlPaste||el('addPasteBox')?.innerHTML||'');
-  if(!rows.length)rows=parsePlainRows(lastAddTextPaste||el('addPasteBox')?.innerText||'');
+  const box=el('addPasteBox');
+  const rows=mergeParsedRows(
+    parseColoredHtml(lastAddHtmlPaste||''),
+    parseColoredHtml(box?.innerHTML||''),
+    parsePlainRows(lastAddTextPaste||''),
+    parsePlainRows(box?.innerText||'')
+  );
   processAddRows(rows);
 }
 function processAddPlainText(){
@@ -1026,10 +1157,11 @@ function processAddPlainText(){
 function processAddRows(rows){
   const agentId=el('assignEmp')?.value||'';
   if(!agentId)return alert('Alege agentul.');
+  rows=(rows||[]).filter(r=>r&&r.phone);
   if(!rows.length){
     pendingAdd=null;
     el('entryReport').className='notice bad';
-    el('entryReport').textContent='Nu am găsit numere valide sau toate numerele găsite sunt deja în arhivă.';
+    el('entryReport').textContent='Nu am găsit numere valide.';
     return;
   }
   const active=rows.filter(x=>x.status==='active').length;
@@ -1038,6 +1170,8 @@ function processAddRows(rows){
   const newPhones=rows.filter(r=>!clientByPhone(r.phone)).length;
   const existingAtAgent=rows.filter(r=>{const c=clientByPhone(r.phone);return c&&assignmentOf(c,agentId)}).length;
   const newAssignments=rows.filter(r=>{const c=clientByPhone(r.phone);return c&&!assignmentOf(c,agentId)}).length;
+  const archivedCount=rows.filter(r=>archivedByPhone(r.phone)).length;
+  const oldAtAgentCount=rows.filter(r=>{const c=clientByPhone(r.phone);return c&&assignmentOfAny(c,agentId)&&!assignmentOf(c,agentId)}).length;
   pendingAdd={agentId,rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
   renderAddParsedPreview(rows,agentId);
   el('entryReport').className='notice';
@@ -1045,6 +1179,7 @@ function processAddRows(rows){
     <div class="notice ok">Agent: <b>${esc(empName(agentId))}</b></div>
     ${summaryCards({active,brown,red,missing:0,newCount:newPhones+newAssignments,conflict:0})}
     <div class="big-status ok">Aici nu se verifică dispăruți. Se modifică doar numerele lipite.</div>
+    ${archivedCount||oldAtAgentCount?`<div class="notice warn">Reapărute din arhivă: <b>${archivedCount}</b><br>Au mai fost la agent: <b>${oldAtAgentCount}</b></div>`:''}
     <button class="green" onclick="applyPartialAdd()">Aplică modificările</button>
     <details class="details-box"><summary>Detalii</summary><div class="notice">
       Numere lipite: ${rows.length}<br>
@@ -1057,20 +1192,34 @@ async function applyPartialAdd(){
   if(!pendingAdd)return alert('Nu există adăugare pregătită.');
   setSaveContext('add');
   const {agentId,rows}=pendingAdd;
+  const issueTotal=rows.filter(r=>archivedByPhone(r.phone)).length + rows.filter(r=>{const c=clientByPhone(r.phone);return c&&assignmentOfAny(c,agentId)&&!assignmentOf(c,agentId)}).length;
+  if(issueTotal>0 && !confirm(`Există ${issueTotal} numere cu istoric/arhivă. Le reactivez/adaug cu istoric păstrat?`))return;
+
   createAutoBackup(`Înainte de adăugare/update parțial la ${empName(agentId)}`);
-  let addedClients=0,addedAssignments=0,updated=0,changed=0,conflicts=0;
+
+  let addedClients=0,addedAssignments=0,updated=0,changed=0,conflicts=0,reactivatedArchive=0,returnedToAgent=0;
+
   rows.forEach(r=>{
-    let c=clientByPhone(r.phone);
-    if(!c){
-      c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat manual/parțial',createdAt:new Date().toISOString(),history:[],assignments:[]};
-      db.clients.push(c);
-      addedClients++;
-    }
+    const res=getOrCreateClientForImport(r,agentId,'Adăugat manual/parțial','Adaugă numere');
+    let c=res.client;
+    if(res.created)addedClients++;
+    if(res.fromArchive)reactivatedArchive++;
+
     let as=assignmentOf(c,agentId);
+    const historicalAtAgent=assignmentOfAny(c,agentId);
+
     if(as && as.status==='safe'){updated++;return}
+
     if(!as){
       as={id:uid('as'),agentId,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[{date:now(),text:`Adăugat parțial cu status ${stxt(r.status)}.`}]};
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
+
+      if(historicalAtAgent){
+        returnedToAgent++;
+        as.history.push({date:now(),text:`Revenit la agent prin adăugare/update. Exista istoric mai vechi la acest agent.`});
+        c.history.push({date:now(),text:`A revenit la ${empName(agentId)} prin adăugare/update. Istoricul vechi a fost păstrat.`});
+      }
+
       c.assignments.push(as);
       c.history.push({date:now(),text:`Apariție nouă la ${empName(agentId)} prin adăugare/update parțial: ${stxt(r.status)}.`});
       addedAssignments++;
@@ -1081,22 +1230,26 @@ async function applyPartialAdd(){
       as.lastVerifiedAt=new Date().toISOString();
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();else{delete as.removedFromSheetAt;delete as.missingAt}
       if(old!==as.status||oldSheet!==as.inSheet){
-        as.history.push({date:now(),text:`Update parțial: ${stxt(old)} → ${stxt(as.status)}. ${newStatus==='safe'?'Protejat de audit.':as.inSheet?'În Sheet.':'Scos din Sheet.'}`});
+        as.history.push({date:now(),text:`Update parțial: ${stxt(old)} → ${stxt(as.status)}. ${as.inSheet?'În Sheet.':'Scos din Sheet.'}`});
         c.history.push({date:now(),text:`La ${empName(agentId)} update parțial: ${stxt(old)} → ${stxt(as.status)}.`});
         changed++;
       }
     }
+
     updated++;
     if(clientHasConflict(c))conflicts++;
   });
+
   pendingAdd=null;
   renderAddParsedPreview(rows,agentId);
+
   const active=rows.filter(x=>x.status==='active').length,brown=rows.filter(x=>x.status==='brown').length,red=rows.filter(x=>x.status==='red').length;
   el('entryReport').className='notice';
   el('entryReport').innerHTML=`<h3 style="margin-top:0">Adăugare / actualizare aplicată</h3>
     <div class="notice ok">Agent: <b>${esc(empName(agentId))}</b></div>
     ${summaryCards({active,brown,red,missing:0,newCount:addedAssignments,conflict:conflicts})}
     <div class="big-status ok">Modificările au fost aplicate. Nu s-au verificat numere dispărute.</div>
+    ${reactivatedArchive||returnedToAgent?`<div class="notice warn">Reapărute din arhivă: <b>${reactivatedArchive}</b><br>Revenite la agent cu istoric vechi: <b>${returnedToAgent}</b></div>`:''}
     <div id="addSavePending" class="inline-save-status"><span class="save-spinner"></span>Se salvează în baza de date...</div>
     <details class="details-box"><summary>Detalii</summary><div class="notice">
       Verificate: ${updated}<br>
@@ -1106,16 +1259,25 @@ async function applyPartialAdd(){
       Conflicte după update: ${conflicts}<br>
       <span class="muted">Notă: un client nou este numărat o singură dată la NOI, chiar dacă i se creează și apariția la agent.</span>
     </div></details>`;
+
   await save();
 }
+
 function renderAddParsedPreview(rows,agentId){
   const tbody=el('addParsedPreview');
   if(!tbody)return;
-  tbody.innerHTML=rows.length?rows.map(r=>{
+  const sorted=sortedAuditRows(rows,agentId);
+  tbody.innerHTML=sorted.length?sorted.map(r=>{
     const c=clientByPhone(r.phone);
     const exists=c?assignmentOf(c,agentId):null;
+    const oldAtAgent=c&&assignmentOfAny(c,agentId)&&!exists;
     const other=c&&!exists;
-    return `<tr><td><div class="phone">${esc(r.phone)}</div></td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${exists?'<span class="pill green">există la agent</span>':other?'<span class="pill orange">există la alt agent</span>':'<span class="pill gray">nou</span>'}</td></tr>`;
+    const arc=archivedByPhone(r.phone);
+    const statusText=exists?'<span class="pill green">există la agent</span>':
+      arc?'<span class="pill purple">reapărut din arhivă</span>':
+      oldAtAgent?'<span class="pill orange">a mai fost la agent</span>':
+      other?'<span class="pill orange">există la alt agent</span>':'<span class="pill gray">nou</span>';
+    return `<tr><td><div class="phone">${esc(r.phone)}</div>${issueBadgesHtml(r,agentId)}</td><td>${label(r.status)}</td><td>${esc(r.color||'')}</td><td>${statusText}</td></tr>`;
   }).join(''):'<tr><td colspan="4" class="muted">Nimic citit.</td></tr>';
 }
 
@@ -1124,8 +1286,50 @@ const pasteBox=el('colorPasteBox');
 pasteBox.addEventListener('paste',e=>{lastHtmlPaste=e.clipboardData.getData('text/html')||'';lastTextPaste=e.clipboardData.getData('text/plain')||''});
 const addPasteBox=el('addPasteBox');
 if(addPasteBox)addPasteBox.addEventListener('paste',e=>{lastAddHtmlPaste=e.clipboardData.getData('text/html')||'';lastAddTextPaste=e.clipboardData.getData('text/plain')||''});
+
+function mergeParsedRows(...groups){
+  const map=new Map();
+  const priority={active:1,missing:2,brown:3,red:4,safe:5};
+
+  groups.flat().forEach(r=>{
+    if(!r||!r.phone)return;
+    const p=norm(r.phone);
+    if(!isValidPhoneDigits(p))return;
+
+    const row={...r,phone:p,status:r.status||'active',color:r.color||'fără culoare'};
+    const old=map.get(p);
+
+    if(!old){
+      map.set(p,row);
+      return;
+    }
+
+    if((priority[row.status]||0)>(priority[old.status]||0)){
+      map.set(p,{...old,...row,phone:p});
+      return;
+    }
+
+    if((!old.color || old.color==='fără culoare') && row.color && row.color!=='fără culoare'){
+      old.color=row.color;
+    }
+
+    if(!old.raw && row.raw)old.raw=row.raw;
+  });
+
+  return [...map.values()];
+}
+
 function clearPasteBox(){lastHtmlPaste='';lastTextPaste='';el('colorPasteBox').innerHTML='';el('plainPaste').value='';el('parsedPreview').innerHTML='';pendingImport=null}
-function processPasteBox(){let rows=parseColoredHtml(lastHtmlPaste||el('colorPasteBox').innerHTML||'');if(!rows.length)rows=parsePlainRows(lastTextPaste||el('colorPasteBox').innerText||'');processImportedRows(rows)}
+function processPasteBox(){
+  const box=el('colorPasteBox');
+  const rows=mergeParsedRows(
+    parseColoredHtml(lastHtmlPaste||''),
+    parseColoredHtml(box?.innerHTML||''),
+    parsePlainRows(lastTextPaste||''),
+    parsePlainRows(box?.innerText||'')
+  );
+  processImportedRows(rows);
+}
 function processPlainText(){processImportedRows(parsePlainRows(el('plainPaste').value))}
 function parsePlainRows(text){
   const seen=new Set(),out=[];
@@ -1327,24 +1531,27 @@ function auditPreviewChangeSummary(rows,a){
 
 function processFullAuditRows(rows){
   purgeExpiredArchive();
-  const archivedInfo=filterOutArchivedRows(rows,'Audit listă');
-  rows=archivedInfo.rows;
-  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide sau toate numerele găsite sunt deja în arhivă.';return}
+  rows=(rows||[]).filter(r=>r&&r.phone);
+  if(!rows.length){pendingImport=null;el('retReport').className='notice bad';el('retReport').textContent='Nu am găsit numere valide. Accept orice număr de 7-15 cifre.';return}
   const a=analyzeFullAudit(rows);
   pendingImport={rows:rows.map(r=>({phone:r.phone,status:r.status,color:r.color||'',raw:r.raw||''}))};
-  renderParsedPreview(rows);
+  renderParsedPreview(rows,a);
   const changeSummary=auditPreviewChangeSummary(rows,a);
   const active=changeSummary.active,brown=changeSummary.brown,red=changeSummary.red;
-  const can=!!a.detected&&!a.ambiguous&&!a.oldTransferredExists;
+  const can=!!a.detected&&!a.ambiguous;
   const entriesText=a.entries.length?a.entries.map(([id,c])=>`${empName(id)}: ${c}`).join('<br>'):'niciun număr cunoscut';
   let msg='Totul arată bine. Poți aplica.';let cls='ok';
   if(a.ambiguous){msg='Nu pot decide agentul: scor egal între agenți. Alege agentul sursă manual.';cls='bad'}
   else if(!a.detected){msg='Nu pot detecta agentul. Alege agentul sursă manual.';cls='bad'}
-  else if(a.oldTransferredExists>0){msg=`Atenție: ${a.oldTransferredExists} numere au mai fost la agentul acesta și acum sunt doar istorice/transferate. Nu aplic automat.`;cls='bad'}
   else {
     const risk=auditRisk(a,rows);
+    const issueCounts=auditIssuesSummary(rows,a);
+    const issueTotal=Object.values(issueCounts).reduce((s,x)=>s+x,0);
     if(risk.risky){msg=`ATENȚIE MARE: lista pare incompletă. Lipsesc ${risk.missing} din ${risk.expected} numere așteptate.`;cls='bad'}
-    else if(a.missing.length>0||a.conflicts>0||a.extra.length>0||a.willAddAssignment>0){msg='Atenție: există schimbări importante. Verifică rezumatul, apoi aplică.';cls='warn'}
+    else if(issueTotal>0||a.oldTransferredExists>0||a.missing.length>0||a.conflicts>0||a.extra.length>0||a.willAddAssignment>0){
+      msg='Atenție: există numere cu istoric/schimbări. Verifică atențiile de sus, apoi poți aplica.';
+      cls='warn';
+    }
   }
   el('retReport').className='notice';
   el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Preview audit listă</h3>
@@ -1353,6 +1560,7 @@ function processFullAuditRows(rows){
     <div class="big-status ${cls}">${esc(msg)}</div>
     <div class="muted" style="margin:8px 0">Cardurile ACTIV / MARO / ROȘU arată doar ce se schimbă acum. Numerele deja setate anterior cu același status nu mai sunt contorizate.</div>
     ${can?'<button class="green" onclick="applyFullAudit()">Aplică modificările</button>':''}
+    ${auditIssuesBlock(rows,a)}
     ${a.missing.length?`<h3>Vor deveni DISPĂRUT</h3><div class="notice bad">${a.missing.map(x=>`<div style="padding:6px 0;border-bottom:1px solid #fecaca"><b>${esc(x.client.phone)}</b>${x.client.note?` <span class="muted">| ${esc(x.client.note)}</span>`:''}</div>`).join('')}</div>`:''}
     <details class="details-box"><summary>Detalii</summary><div class="notice">
       Numere lipite: ${rows.length}<br>
@@ -1374,20 +1582,36 @@ async function applyFullAudit(){
   setSaveContext('audit');
   const rows=pendingImport.rows,a=analyzeFullAudit(rows);
   if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
-  if(a.oldTransferredExists>0)return alert('Există numere care au fost deja transferate/istorice la acest agent. Verifică manual înainte.');
   const risk=auditRisk(a,rows);
   if(risk.risky && !confirm(`ATENȚIE: lista pare incompletă. Ai lipit ${risk.pasted} rânduri, dar erau ${risk.expected} numere așteptate în Sheet. ${risk.missing} vor deveni DISPĂRUT. Continui?`))return;
+  const issueCounts=auditIssuesSummary(rows,a);
+  const issueTotal=Object.values(issueCounts).reduce((s,x)=>s+x,0);
+  if(issueTotal>0 && !confirm(`Există ${issueTotal} atenționări în audit: reapărute din arhivă, istoric la agent, active la alt agent sau conflicte. Continui aplicarea?`))return;
+
   const changeSummary=auditPreviewChangeSummary(rows,a);
   createAutoBackup(`Înainte de audit listă pentru ${empName(a.detected)}`);
-  let updated=0,addedClients=0,addedAssignments=0,changed=0,missingCount=0,conflicts=0;
+
+  let updated=0,addedClients=0,addedAssignments=0,changed=0,missingCount=0,conflicts=0,reactivatedArchive=0,returnedToAgent=0;
+
   rows.forEach(r=>{
-    let c=clientByPhone(r.phone);
-    if(!c){c={id:uid('cli'),phone:norm(r.phone),note:'Adăugat automat din audit listă',createdAt:new Date().toISOString(),history:[],assignments:[]};db.clients.push(c);addedClients++}
+    const res=getOrCreateClientForImport(r,a.detected,'Adăugat automat din audit listă','Audit listă');
+    let c=res.client;
+    if(res.created)addedClients++;
+    if(res.fromArchive)reactivatedArchive++;
+
     let as=assignmentOf(c,a.detected);
+    const historicalAtAgent=assignmentOfAny(c,a.detected);
+
     if(as && as.status==='safe'){updated++;return}
+
     if(!as){
       as={id:uid('as'),agentId:a.detected,status:r.status,inSheet:r.status==='active',createdAt:new Date().toISOString(),lastVerifiedAt:new Date().toISOString(),noAnswerCount:0,feedback:'',history:[]};
       if(r.status!=='active')as.removedFromSheetAt=new Date().toISOString();
+      if(historicalAtAgent){
+        returnedToAgent++;
+        as.history.push({date:now(),text:`Revenit la agent prin audit listă. Exista istoric mai vechi la acest agent.`});
+        c.history.push({date:now(),text:`A revenit la ${empName(a.detected)} prin audit listă. Istoricul vechi a fost păstrat.`});
+      }
       c.assignments.push(as);addedAssignments++;
       c.history.push({date:now(),text:`Apariție nouă la ${empName(a.detected)} din audit listă cu status ${stxt(r.status)}.`});
     }else{
@@ -1402,9 +1626,14 @@ async function applyFullAudit(){
         changed++;
       }
     }
+
     updated++;
-    if(clientHasConflict(c)){conflicts++;c.history.push({date:now(),text:`Conflict detectat între agenți: ${activeAssignments(c).map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`})}
+    if(clientHasConflict(c)){
+      conflicts++;
+      c.history.push({date:now(),text:`Conflict detectat între agenți: ${activeAssignments(c).map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`});
+    }
   });
+
   a.missing.forEach(x=>{
     const old=x.as.status;
     x.as.status='missing';
@@ -1415,28 +1644,35 @@ async function applyFullAudit(){
     x.client.history.push({date:now(),text:`La ${empName(a.detected)}: nu s-a regăsit în lista completă. Mutat la DISPARUT.`});
     missingCount++;
   });
+
   pendingImport=null;
-  renderParsedPreview(rows);
+  renderParsedPreview(rows,a);
+
   const active=changeSummary.active,brown=changeSummary.brown,red=changeSummary.red,totalConflicts=db.clients.filter(clientHasConflict).length;
   el('retReport').className='notice';
   el('retReport').innerHTML=`<h3 style="margin-top:0;font-size:22px">Audit aplicat</h3>
     <div class="notice ok">Agent: <b>${esc(empName(a.detected))}</b></div>
     ${summaryCards({active,brown,red,missing:missingCount,newCount:addedAssignments,conflict:totalConflicts})}
     <div class="big-status ok">Modificările au fost aplicate. Backup automat creat.</div>
+    ${reactivatedArchive||returnedToAgent?`<div class="notice warn">Reapărute din arhivă: <b>${reactivatedArchive}</b><br>Revenite la agent cu istoric vechi: <b>${returnedToAgent}</b></div>`:''}
     <div id="auditSavePending" class="inline-save-status"><span class="save-spinner"></span>Se salvează în baza de date...</div>
     <details class="details-box"><summary>Detalii</summary><div class="notice">Verificate/lipite: ${updated}<br>Clienți noi: ${addedClients}<br>Apariții noi la agent: ${addedAssignments}<br>Status/stare Sheet schimbate: ${changed}<br>Dispărute: ${missingCount}</div></details>`;
+
   await save();
 }
-function renderParsedPreview(rows){
-  el('parsedPreview').innerHTML=rows.length?rows.map((r,i)=>{
+
+function renderParsedPreview(rows,a=null){
+  const detected=a?.detected||'';
+  const sorted=sortedAuditRows(rows,detected);
+  el('parsedPreview').innerHTML=sorted.length?sorted.map((r,i)=>{
     const c=clientByPhone(r.phone);
     const canRemove=!!pendingImport;
     return`<tr>
-      <td><div class="phone s-${r.status}">${esc(r.phone)}</div></td>
+      <td><div class="phone s-${r.status}">${esc(r.phone)}</div>${issueBadgesHtml(r,detected)}</td>
       <td>${label(r.status)}</td>
       <td>${esc(r.color||'')}</td>
-      <td>${c?clientAgentsHtml(c):'<span class="pill blue">nou</span>'}</td>
-      <td>${canRemove?`<button class="small red" onclick="removePendingImportRow(${i})">Elimină</button>`:'—'}</td>
+      <td>${c?clientAgentsHtml(c):archivedByPhone(r.phone)?'<span class="pill purple">în arhivă</span>':'<span class="pill blue">nou</span>'}</td>
+      <td>${canRemove?`<button class="small red" onclick="removePendingImportPhone('${norm(r.phone)}')">Elimină</button>`:'—'}</td>
     </tr>`;
   }).join(''):'<tr><td colspan="5" class="muted">Nimic citit.</td></tr>';
 }
@@ -1444,6 +1680,13 @@ function renderParsedPreview(rows){
 function removePendingImportRow(index){
   if(!pendingImport||!Array.isArray(pendingImport.rows))return;
   pendingImport.rows.splice(index,1);
+  processFullAuditRows(pendingImport.rows);
+}
+
+function removePendingImportPhone(phone){
+  if(!pendingImport||!Array.isArray(pendingImport.rows))return;
+  const p=norm(phone);
+  pendingImport.rows=pendingImport.rows.filter(r=>norm(r.phone)!==p);
   processFullAuditRows(pendingImport.rows);
 }
 

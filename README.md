@@ -132,3 +132,6 @@ Astfel cardul MARO se potrivește cu lista filtrată pe MARO din Dashboard.
 - Cardul `MARO` din Dashboard numără doar numerele care pot intra la Transfer MARO.
 - Filtrul `MARO` din Dashboard afișează doar aceleași numere transferabile.
 - Dacă un telefon este MARO la un agent, dar ACTIV/ROȘU/DISPĂRUT/SAFE la alt agent, nu mai apare la MARO în Dashboard.
+
+## Text MARO
+Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre este simplificat la `MARO`.

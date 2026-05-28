@@ -1075,7 +1075,7 @@ function renderStats(){
 
   const inSheet=db.clients.filter(c=>activeAssignments(c).some(a=>a.inSheet!==false)).length;
   const active=db.clients.filter(c=>hasStatus(c,'active')).length;
-  // MARO în Dashboard = doar MARO transferabile.
+  // MARO în Dashboard = doar MARO.
   // Dacă numărul are și ACTIV/ROȘU/DISPĂRUT/SAFE la alt agent, nu îl mai afișăm la MARO.
   const brown=db.clients.filter(c=>transferBlockReason(c)==='').length;
   const red=db.clients.filter(c=>hasStatus(c,'red')).length;
@@ -1089,7 +1089,7 @@ function renderStats(){
   }).length;
 
   el('stats').innerHTML=[
-    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO transferabile',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
+    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
   ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');
 }
 function renderAgents(){

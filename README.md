@@ -121,3 +121,8 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 
 - Contorul din Dashboard pentru `Verificare` nu mai numără MARO simplu.
 - Acum numără doar telefoane unice care chiar intră în Verificare: ROȘU, DISPĂRUT, CONFLICT sau MARO epuizat.
+
+## Fix dashboard statusuri unice
+
+Cardurile din Dashboard pentru ACTIV/MARO/ROȘU/DISPĂRUT/SAFE numără acum telefoane unice, nu apariții la agenți.
+Astfel cardul MARO se potrivește cu lista filtrată pe MARO din Dashboard.

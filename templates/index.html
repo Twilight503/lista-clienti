@@ -1067,14 +1067,25 @@ function render(){
 }
 function renderStats(){
   const unique=db.clients.length;
-  const apps=db.clients.flatMap(c=>activeAssignments(c));
-  const inSheet=apps.filter(a=>a.inSheet!==false).length;
-  const active=apps.filter(a=>a.status==='active').length,brown=apps.filter(a=>a.status==='brown').length,red=apps.filter(a=>a.status==='red').length,missing=apps.filter(a=>a.status==='missing').length,safe=apps.filter(a=>a.status==='safe').length;
+
+  // Dashboard-ul trebuie să arate telefoane unice, ca filtrul din tabel,
+  // nu număr de apariții la agenți. Dacă același telefon este MARO la 2 agenți,
+  // cardul MARO îl numără o singură dată.
+  const hasStatus=(c,status)=>activeAssignments(c).some(a=>a.status===status);
+
+  const inSheet=db.clients.filter(c=>activeAssignments(c).some(a=>a.inSheet!==false)).length;
+  const active=db.clients.filter(c=>hasStatus(c,'active')).length;
+  const brown=db.clients.filter(c=>hasStatus(c,'brown')).length;
+  const red=db.clients.filter(c=>hasStatus(c,'red')).length;
+  const missing=db.clients.filter(c=>hasStatus(c,'missing')).length;
+  const safe=db.clients.filter(c=>hasStatus(c,'safe')).length;
+
   const conflicts=db.clients.filter(clientHasConflict).length;
   const verify=db.clients.filter(c=>{
     const activeAs=activeAssignments(c);
     return clientHasConflict(c) || activeAs.some(a=>['red','missing'].includes(a.status) || isBrownExhausted(c,a));
   }).length;
+
   el('stats').innerHTML=[
     ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
   ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');

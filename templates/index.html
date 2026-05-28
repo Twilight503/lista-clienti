@@ -194,7 +194,7 @@ body.modal-open{overflow:hidden}
       <select id="fStatus" onchange="render()">
         <option value="all">Toate statusurile</option>
         <option value="active">ACTIV</option>
-        <option value="brown">MARO</option>
+        <option value="brown">MARO transferabil</option>
         <option value="red">ROȘU</option>
         <option value="missing">DISPĂRUT</option>
         <option value="safe">SAFE</option>
@@ -1075,7 +1075,9 @@ function renderStats(){
 
   const inSheet=db.clients.filter(c=>activeAssignments(c).some(a=>a.inSheet!==false)).length;
   const active=db.clients.filter(c=>hasStatus(c,'active')).length;
-  const brown=db.clients.filter(c=>hasStatus(c,'brown')).length;
+  // MARO în Dashboard = doar MARO transferabile.
+  // Dacă numărul are și ACTIV/ROȘU/DISPĂRUT/SAFE la alt agent, nu îl mai afișăm la MARO.
+  const brown=db.clients.filter(c=>transferBlockReason(c)==='').length;
   const red=db.clients.filter(c=>hasStatus(c,'red')).length;
   const missing=db.clients.filter(c=>hasStatus(c,'missing')).length;
   const safe=db.clients.filter(c=>hasStatus(c,'safe')).length;
@@ -1087,7 +1089,7 @@ function renderStats(){
   }).length;
 
   el('stats').innerHTML=[
-    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
+    ['Telefoane unice',unique],['În Sheet',inSheet],['ACTIV',active],['MARO transferabile',brown],['ROȘU',red],['DISPĂRUT',missing],['SAFE',safe],['CONFLICTE',conflicts],['Verificare',verify]
   ].map(x=>`<div class="stat"><strong>${x[1]}</strong><span>${x[0]}</span></div>`).join('');
 }
 function renderAgents(){
@@ -1121,6 +1123,7 @@ function renderClientsTable(){
   let rows=db.clients.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
   const q=clean(el('q')?.value||''),fs=el('fStatus')?.value||'all',fe=el('fEmp')?.value||'all';
   if(fs==='conflict')rows=rows.filter(clientHasConflict);
+  else if(fs==='brown')rows=rows.filter(c=>transferBlockReason(c)==='');
   else if(fs!=='all')rows=rows.filter(c=>activeAssignments(c).some(a=>a.status===fs));
   if(fe!=='all')rows=rows.filter(c=>activeAssignments(c).some(a=>a.agentId===fe));
   if(q)rows=rows.filter(c=>clean([c.phone,c.note,clientAgentsHtml(c),(c.history||[]).map(h=>h.text).join(' ')].join(' ')).includes(q));

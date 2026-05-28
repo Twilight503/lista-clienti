@@ -126,3 +126,9 @@ Am adăugat un favicon SVG cu logo `VC` și badge vizual în header.
 
 Cardurile din Dashboard pentru ACTIV/MARO/ROȘU/DISPĂRUT/SAFE numără acum telefoane unice, nu apariții la agenți.
 Astfel cardul MARO se potrivește cu lista filtrată pe MARO din Dashboard.
+
+
+## Fix Dashboard MARO transferabile
+- Cardul `MARO` din Dashboard numără doar numerele care pot intra la Transfer MARO.
+- Filtrul `MARO` din Dashboard afișează doar aceleași numere transferabile.
+- Dacă un telefon este MARO la un agent, dar ACTIV/ROȘU/DISPĂRUT/SAFE la alt agent, nu mai apare la MARO în Dashboard.

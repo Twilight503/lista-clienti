@@ -135,3 +135,10 @@ Astfel cardul MARO se potrivește cu lista filtrată pe MARO din Dashboard.
 
 ## Text MARO
 Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre este simplificat la `MARO`.
+
+
+## Fix arhivă + backup/rollback
+- Backup-urile automate includ acum `archivedClients`.
+- La `Restaurează backup`, arhiva curentă nu se mai pierde; se îmbină cu arhiva din backup.
+- La import JSON, arhiva curentă se păstrează/îmbină dacă backup-ul este vechi sau nu conține arhivă.
+- Exportul normalizează arhiva înainte de download.

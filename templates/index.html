@@ -2196,14 +2196,75 @@ function renderTransferHistory(){
 }
 
 /* Backup */
-function createAutoBackup(reason){db.backups=db.backups||[];db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:{version:db.version,createdAt:db.createdAt,employees:clone(db.employees),deletedEmployeeNames:clone(db.deletedEmployeeNames||{}),clients:clone(db.clients),deletedRecords:[],transfers:clone(db.transfers||[])}});if(db.backups.length>3)db.backups=db.backups.slice(-3)}
+
+function archiveKey(a){return norm(a?.phone||'')}
+function mergeArchivedLists(...lists){
+  const map=new Map();
+  lists.flat().forEach(raw=>{
+    const a=normalizeArchived(raw);
+    if(!a||!a.phone)return;
+    const key=archiveKey(a);
+    const old=map.get(key);
+    if(!old){map.set(key,a);return}
+
+    const oldDate=new Date(old.archivedAt||0).getTime()||0;
+    const newDate=new Date(a.archivedAt||0).getTime()||0;
+    const base=newDate>=oldDate?a:old;
+    const other=newDate>=oldDate?old:a;
+
+    base.history=mergeHistory(other.history,base.history);
+    base.clientHistory=mergeHistory(other.clientHistory,base.clientHistory);
+    base.assignmentsSnapshot=(base.assignmentsSnapshot&&base.assignmentsSnapshot.length)?base.assignmentsSnapshot:(other.assignmentsSnapshot||[]);
+    if(!base.note&&other.note)base.note=other.note;
+    if(!base.reason&&other.reason)base.reason=other.reason;
+    map.set(key,base);
+  });
+  return [...map.values()].filter(a=>new Date(a.deleteAt).getTime()>Date.now());
+}
+function mergeHistory(...lists){
+  const seen=new Set(),out=[];
+  lists.flat().forEach(h=>{
+    if(!h)return;
+    const key=`${h.date||''}|${h.text||''}`;
+    if(seen.has(key))return;
+    seen.add(key);out.push(h);
+  });
+  return out;
+}
+function snapshotDbForBackup(){
+  return {
+    version:db.version,
+    createdAt:db.createdAt,
+    employees:clone(db.employees),
+    deletedEmployeeNames:clone(db.deletedEmployeeNames||{}),
+    clients:clone(db.clients),
+    deletedRecords:[],
+    transfers:clone(db.transfers||[]),
+    archivedClients:clone(db.archivedClients||[])
+  };
+}
+function restoreDataKeepingArchive(data){
+  const currentArchive=clone(db.archivedClients||[]);
+  const incoming=clone(data||{});
+  incoming.archivedClients=mergeArchivedLists(incoming.archivedClients||[],currentArchive);
+  return normalizeDb(incoming);
+}
+
+function createAutoBackup(reason){
+  db.archivedClients=mergeArchivedLists(db.archivedClients||[]);
+  db.backups=db.backups||[];
+  db.backups.push({id:uid('bak'),createdAt:new Date().toISOString(),createdAtRo:now(),reason,data:snapshotDbForBackup()});
+  if(db.backups.length>3)db.backups=db.backups.slice(-3);
+}
 function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');restoreBackup(b.id)}
 function restoreBackup(id){
   const b=(db.backups||[]).find(x=>x.id===id);
   if(!b)return alert('Backup inexistent.');
-  if(!confirm(`Revii la backup-ul din ${b.createdAtRo}?`))return;
+  if(!confirm(`Revii la backup-ul din ${b.createdAtRo}? Arhiva NU va fi ștearsă; se păstrează/îmbină cu arhiva curentă.`))return;
   const keep=db.backups;
-  db={...clone(b.data),deletedRecords:[],backups:keep};
+  db=restoreDataKeepingArchive(b.data);
+  db.deletedRecords=[];
+  db.backups=keep;
   save();
 }
 
@@ -2249,9 +2310,30 @@ function renderBackupInfo(){
       <button class="small orange" onclick="restoreBackup('${b.id}')">Restaurează</button>
     </div>`).join('')}</div>`;
 }
-function exportDb(){download(db,'backup_verificare_clienti_render.json')}
+function exportDb(){db.archivedClients=mergeArchivedLists(db.archivedClients||[]);download(db,'backup_verificare_clienti_render.json')}
 function copyDb(){navigator.clipboard.writeText(JSON.stringify(db,null,2)).then(()=>alert('JSON copiat.')).catch(()=>alert('Nu pot copia automat.'))}
-function importDbFile(ev){const f=ev.target.files[0];if(!f)return;if(!confirm('Înlocuiești baza locală?'))return;const r=new FileReader();r.onload=()=>{try{let imported=JSON.parse(r.result);if(imported.db)imported=imported.db;if(imported.data&&imported.data.clients)imported=imported.data;delete imported._id;delete imported._rev;db=normalizeDb(imported);save();alert('Bază importată.')}catch(e){console.error(e);alert('Fișier invalid sau format incompatibil.')}};r.readAsText(f);ev.target.value=''}
+function importDbFile(ev){
+  const f=ev.target.files[0];
+  if(!f)return;
+  if(!confirm('Înlocuiești baza din import? Arhiva curentă se păstrează/îmbină, nu se șterge automat.'))return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      let imported=JSON.parse(r.result);
+      if(imported.db)imported=imported.db;
+      if(imported.data&&imported.data.clients)imported=imported.data;
+      delete imported._id;
+      delete imported._rev;
+      db=restoreDataKeepingArchive(imported);
+      save();
+      alert('Bază importată. Arhiva a fost păstrată/îmbinată.');
+    }catch(e){
+      console.error(e);
+      alert('Fișier invalid sau format incompatibil.');
+    }
+  };
+  r.readAsText(f);ev.target.value='';
+}
 async function resetDb(){
   if(!confirm('Ștergi baza din MongoDB? Fă backup înainte.'))return;
   try{

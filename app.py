@@ -55,18 +55,124 @@ def _parse_iso(dt):
 def purge_expired_archived_clients(items):
     now_utc = datetime.now(timezone.utc)
     kept = []
-    for item in items or []:
-        if not isinstance(item, dict):
+    for raw in items or []:
+        if not isinstance(raw, dict):
             continue
+
+        item = deepcopy(raw)
         archived_at = _parse_iso(item.get("archivedAt")) or now_utc
         delete_at = _parse_iso(item.get("deleteAt")) or (archived_at + timedelta(days=90))
+
         if delete_at <= now_utc:
             continue
+
         item["archivedAt"] = archived_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         item["deleteAt"] = delete_at.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
         item.setdefault("history", [])
+        item.setdefault("assignmentsSnapshot", [])
+        item.setdefault("clientHistory", [])
         kept.append(item)
     return kept
+
+
+def phone_key(value):
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def merge_unique_history(*lists):
+    seen = set()
+    merged = []
+    for items in lists:
+        for item in items or []:
+            if not isinstance(item, dict):
+                continue
+            key = (str(item.get("date", "")), str(item.get("text", "")))
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(item)
+    return merged
+
+
+def merge_archived_clients(*lists):
+    """
+    Îmbină arhivele după telefon. Este intenționat server-side, ca un update vechi,
+    un import vechi sau un restore fără `archivedClients` să nu poată goli arhiva.
+    """
+    merged = {}
+    for items in lists:
+        for raw in purge_expired_archived_clients(items or []):
+            key = phone_key(raw.get("phone"))
+            if not key:
+                continue
+
+            old = merged.get(key)
+            if not old:
+                merged[key] = raw
+                continue
+
+            old_date = _parse_iso(old.get("archivedAt")) or datetime.min.replace(tzinfo=timezone.utc)
+            new_date = _parse_iso(raw.get("archivedAt")) or datetime.min.replace(tzinfo=timezone.utc)
+            base, other = (raw, old) if new_date >= old_date else (old, raw)
+
+            base["history"] = merge_unique_history(other.get("history"), base.get("history"))
+            base["clientHistory"] = merge_unique_history(other.get("clientHistory"), base.get("clientHistory"))
+            if not base.get("assignmentsSnapshot") and other.get("assignmentsSnapshot"):
+                base["assignmentsSnapshot"] = other.get("assignmentsSnapshot")
+            for field in ("note", "reason", "lastReappearedAt", "lastReappearedSource", "feedbackSummary"):
+                if not base.get(field) and other.get(field):
+                    base[field] = other.get(field)
+            base["reappearCount"] = max(int(base.get("reappearCount") or 0), int(other.get("reappearCount") or 0))
+            base["noAnswerTotal"] = max(int(base.get("noAnswerTotal") or 0), int(other.get("noAnswerTotal") or 0))
+            merged[key] = base
+
+    return list(merged.values())
+
+
+def active_client_phones(state):
+    phones = set()
+    for client in (state or {}).get("clients", []) or []:
+        if isinstance(client, dict):
+            key = phone_key(client.get("phone"))
+            if key:
+                phones.add(key)
+    return phones
+
+
+def protect_archived_clients(incoming_state, current_doc, allow_archive_shrink=False):
+    """
+    Protecție anti-pierdere arhivă la salvare.
+
+    Reguli:
+    - dacă noua stare nu conține arhivă, se păstrează arhiva curentă din Mongo;
+    - dacă noua stare are arhivă incompletă, se îmbină cu arhiva curentă;
+    - dacă un telefon a fost reactivat în `clients`, nu este reintrodus în arhivă;
+    - ștergerea definitivă din arhivă este permisă doar când frontendul trimite explicit
+      `archiveGuard.allowArchiveShrink=true`;
+    - intrările expirate rămân curățate automat de funcția de purge.
+    """
+    if not isinstance(incoming_state, dict):
+        incoming_state = {}
+
+    current_archive = purge_expired_archived_clients((current_doc or {}).get("archivedClients", []))
+    incoming_archive = incoming_state.get("archivedClients") if isinstance(incoming_state.get("archivedClients"), list) else []
+    reactivated_phones = active_client_phones(incoming_state)
+
+    if allow_archive_shrink:
+        protected_archive = purge_expired_archived_clients(incoming_archive)
+    else:
+        preserved_current = [
+            a for a in current_archive
+            if phone_key(a.get("phone")) not in reactivated_phones
+        ]
+        protected_archive = merge_archived_clients(incoming_archive, preserved_current)
+
+    # Nu ținem același telefon simultan în baza activă și în arhivă.
+    incoming_state["archivedClients"] = [
+        a for a in protected_archive
+        if phone_key(a.get("phone")) not in reactivated_phones
+    ]
+    return incoming_state
 
 
 def sanitize_state(state):
@@ -235,9 +341,15 @@ def api_save_state():
     if client_rev != current_rev:
         return jsonify({"error": "conflict", "current_rev": current_rev}), 409
 
+    allow_archive_shrink = bool(
+        isinstance(payload.get("archiveGuard"), dict)
+        and payload.get("archiveGuard", {}).get("allowArchiveShrink") is True
+    )
+
     new_state = deepcopy(new_state)
     new_state.pop("_id", None)
     new_state.pop("_rev", None)
+    new_state = protect_archived_clients(new_state, current, allow_archive_shrink=allow_archive_shrink)
     new_state = sanitize_state(new_state)
     new_state["updatedAt"] = utc_now()
     new_state["_rev"] = current_rev + 1
@@ -256,6 +368,10 @@ def api_save_state():
 @app.post("/api/reset")
 @require_login
 def api_reset():
+    payload = request.get_json(silent=True) or {}
+    if payload.get("confirm") != "RESET":
+        return "Confirmare lipsă. Pentru reset complet trebuie trimis confirm=RESET.", 400
+
     state = empty_state()
     state["_id"] = STATE_ID
     state["_rev"] = 1

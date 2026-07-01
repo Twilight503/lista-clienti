@@ -142,3 +142,12 @@ Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre est
 - La `Restaurează backup`, arhiva curentă nu se mai pierde; se îmbină cu arhiva din backup.
 - La import JSON, arhiva curentă se păstrează/îmbină dacă backup-ul este vechi sau nu conține arhivă.
 - Exportul normalizează arhiva înainte de download.
+
+## Fix hard anti-pierdere arhivă la update/import/restore
+- Protecția pentru `archivedClients` este acum și în backend, în `/api/state`, nu doar în frontend.
+- Dacă un frontend/backup vechi trimite baza fără `archivedClients`, serverul păstrează arhiva curentă din MongoDB.
+- Dacă restore/import trimite o arhivă incompletă, serverul o îmbină cu arhiva curentă.
+- Dacă un număr este reactivat în baza activă, serverul nu îl reintroduce în arhivă.
+- Ștergerea definitivă din Arhivă este singura acțiune care poate micșora explicit arhiva și trimite `archiveGuard.allowArchiveShrink=true`.
+- Datele invalide `archivedAt` / `deleteAt` sunt normalizate ca să nu șteargă accidental intrări din arhivă.
+- Resetul MongoDB cere confirmare exactă `RESET` și backendul refuză reset fără confirmare.

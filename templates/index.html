@@ -388,7 +388,7 @@ body.modal-open{overflow:hidden}
       <h3>Undo</h3><div id="backupInfo" class="notice">Încă nu există backup automat.</div><button class="orange" onclick="restoreLastBackup()">Revino la ultimul backup</button>
     </div>
     <div class="card c6">
-      <h2>Reset</h2><button class="red" onclick="resetDb()">Resetează baza locală</button>
+      <h2>Reset</h2><button class="red" onclick="resetDb()">Resetează baza MongoDB</button>
       <h3>JSON curent</h3><div id="preview" class="mono"></div>
     </div>
   </div>
@@ -468,9 +468,19 @@ function el(id){return document.getElementById(id)}
 function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8)}
 function now(){return new Date().toLocaleString('ro-RO')}
 
-function addDaysIso(dateIso,days){const d=new Date(dateIso||new Date().toISOString());d.setDate(d.getDate()+days);return d.toISOString()}
+function safeIsoDate(value,fallback){
+  const d=new Date(value||'');
+  if(Number.isFinite(d.getTime()))return d.toISOString();
+  const f=new Date(fallback||new Date().toISOString());
+  return Number.isFinite(f.getTime())?f.toISOString():new Date().toISOString();
+}
+function addDaysIso(dateIso,days){
+  const d=new Date(safeIsoDate(dateIso,new Date().toISOString()));
+  d.setDate(d.getDate()+days);
+  return d.toISOString();
+}
 function daysLeftText(deleteAt){
-  const ms=new Date(deleteAt).getTime()-Date.now();
+  const ms=new Date(safeIsoDate(deleteAt,new Date().toISOString())).getTime()-Date.now();
   const d=Math.ceil(ms/86400000);
   if(d<=0)return 'expiră acum';
   if(d===1)return '1 zi';
@@ -478,14 +488,15 @@ function daysLeftText(deleteAt){
 }
 function normalizeArchived(entry){
   if(!entry||!entry.phone)return null;
-  const archivedAt=entry.archivedAt||new Date().toISOString();
+  const archivedAt=safeIsoDate(entry.archivedAt,new Date().toISOString());
+  const deleteAt=safeIsoDate(entry.deleteAt,addDaysIso(archivedAt,90));
   return {
     id:entry.id||uid('arc'),
     phone:norm(entry.phone),
     note:entry.note||'',
     reason:entry.reason||'Arhivat manual',
     archivedAt,
-    deleteAt:entry.deleteAt||addDaysIso(archivedAt,90),
+    deleteAt,
     history:Array.isArray(entry.history)?entry.history:[],
     assignmentsSnapshot:Array.isArray(entry.assignmentsSnapshot)?entry.assignmentsSnapshot:[],
     clientHistory:Array.isArray(entry.clientHistory)?entry.clientHistory:[],
@@ -499,7 +510,10 @@ function normalizeArchived(entry){
 function purgeExpiredArchive(){
   db.archivedClients=(db.archivedClients||[]).map(normalizeArchived).filter(Boolean);
   const nowTs=Date.now();
-  db.archivedClients=db.archivedClients.filter(a=>new Date(a.deleteAt).getTime()>nowTs);
+  db.archivedClients=db.archivedClients.filter(a=>{
+    const t=new Date(a.deleteAt).getTime();
+    return Number.isFinite(t)&&t>nowTs;
+  });
 }
 function archivedByPhone(phone){
   const p=norm(phone);
@@ -770,9 +784,9 @@ function reactivateArchived(phone){
 function deleteArchivedForever(phone){
   const arc=archivedByPhone(phone);
   if(!arc)return;
-  if(!confirm(`Ștergi definitiv din arhivă numărul ${phone}?`))return;
+  if(!confirm(`Ștergi definitiv din arhivă numărul ${phone}? Aceasta este singura acțiune care are voie să micșoreze arhiva în MongoDB.`))return;
   db.archivedClients=(db.archivedClients||[]).filter(x=>norm(x.phone)!==norm(phone));
-  save();
+  save({allowArchiveShrink:true});
 }
 
 
@@ -825,7 +839,10 @@ function normalizeDb(data){
     };
   });
   const nowTs=Date.now();
-  data.archivedClients=data.archivedClients.filter(a=>new Date(a.deleteAt).getTime()>nowTs);
+  data.archivedClients=data.archivedClients.filter(a=>{
+    const t=new Date(a.deleteAt).getTime();
+    return Number.isFinite(t)&&t>nowTs;
+  });
   return data;
 }
 function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing','safe'].includes(s)?s:'active'}
@@ -833,6 +850,7 @@ let stateRev = window.__INITIAL_REV__ || 0;
 let saveTimer = null;
 let isSaving = false;
 let dirtyWhileSaving = false;
+let pendingArchiveShrink = false;
 let booting = true;
 let lastActionButton = null;
 let lastButtonIndicator = null;
@@ -883,7 +901,7 @@ function setSaveVisual(state){
   }
 }
 
-function save(){
+function save(opts={}){
   purgeExpiredArchive();
   render();
   renderVerification();
@@ -893,29 +911,33 @@ function save(){
   renderBackupInfo();
   previewDb();
   clearTimeout(saveTimer);
-  return persistDb();
+  return persistDb(opts);
 }
 
-function persistOnly(){
+function persistOnly(opts={}){
   purgeExpiredArchive();
   renderArchive();
   previewDb();
-  schedulePersist();
+  schedulePersist(opts);
 }
 
-function schedulePersist(){
+function schedulePersist(opts={}){
+  if(opts.allowArchiveShrink)pendingArchiveShrink=true;
   if(booting)return;
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(persistDb,650);
+  saveTimer=setTimeout(()=>persistDb(),650);
 }
 
-async function persistDb(){
+async function persistDb(opts={}){
+  if(opts.allowArchiveShrink)pendingArchiveShrink=true;
   if(booting)return true;
   if(isSaving){
     dirtyWhileSaving=true;
     return currentPersistPromise || Promise.resolve(true);
   }
 
+  const allowArchiveShrink=pendingArchiveShrink===true;
+  pendingArchiveShrink=false;
   isSaving=true;
   dirtyWhileSaving=false;
   setSaveVisual('saving');
@@ -925,7 +947,7 @@ async function persistDb(){
       const res=await fetch('/api/state',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({db,rev:stateRev})
+        body:JSON.stringify({db,rev:stateRev,archiveGuard:{allowArchiveShrink}})
       });
 
       if(res.status===409){
@@ -2219,7 +2241,10 @@ function mergeArchivedLists(...lists){
     if(!base.reason&&other.reason)base.reason=other.reason;
     map.set(key,base);
   });
-  return [...map.values()].filter(a=>new Date(a.deleteAt).getTime()>Date.now());
+  return [...map.values()].filter(a=>{
+    const t=new Date(a.deleteAt).getTime();
+    return Number.isFinite(t)&&t>Date.now();
+  });
 }
 function mergeHistory(...lists){
   const seen=new Set(),out=[];
@@ -2335,9 +2360,14 @@ function importDbFile(ev){
   r.readAsText(f);ev.target.value='';
 }
 async function resetDb(){
-  if(!confirm('Ștergi baza din MongoDB? Fă backup înainte.'))return;
+  const confirmText=prompt('ATENȚIE: asta șterge toată baza din MongoDB, inclusiv arhiva. Scrie exact RESET ca să continui.');
+  if(confirmText!=='RESET')return;
   try{
-    const res=await fetch('/api/reset',{method:'POST'});
+    const res=await fetch('/api/reset',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({confirm:'RESET'})
+    });
     if(!res.ok)throw new Error(await res.text());
     location.reload();
   }catch(e){

@@ -151,3 +151,14 @@ Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre est
 - Ștergerea definitivă din Arhivă este singura acțiune care poate micșora explicit arhiva și trimite `archiveGuard.allowArchiveShrink=true`.
 - Datele invalide `archivedAt` / `deleteAt` sunt normalizate ca să nu șteargă accidental intrări din arhivă.
 - Resetul MongoDB cere confirmare exactă `RESET` și backendul refuză reset fără confirmare.
+
+## Actualizare reguli MARO / conflict / istoric transferuri
+
+- În pagina **Verificare** există buton pentru ștergerea în masă a aparițiilor MARO.
+- Ștergerea în masă protejează orice telefon care este ACTIV la alt agent și elimină numai aparițiile MARO eligibile; ROȘU, DISPĂRUT și SAFE rămân.
+- Înainte de ștergerea în masă se creează automat un backup.
+- **CONFLICT** înseamnă acum exclusiv: telefon ACTIV la un agent și ROȘU la alt agent.
+- Combinațiile cu MARO sau DISPĂRUT nu mai sunt marcate drept conflict.
+- Istoricul transferurilor păstrează maximum ultimele 100 de batch-uri.
+- Istoricul transferurilor afișează 10 batch-uri pe pagină și doar 8 numere ca preview pentru fiecare batch; lista completă rămâne disponibilă prin butonul de copiere.
+- Datele importate sunt normalizate mai strict, iar redirectul după login acceptă doar pagini interne.

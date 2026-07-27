@@ -59,7 +59,7 @@ tr:hover td{background:#fbfdff}.phone{font-weight:900;white-space:nowrap}
 .big-status{font-size:18px;font-weight:900;padding:14px 16px;border-radius:16px;margin:12px 0}.big-status.ok{background:#ecfdf3;border:1px solid #86efac;color:#166534}.big-status.warn{background:#fff7ed;border:1px solid #fdba74;color:#9a3412}.big-status.bad{background:#fef2f2;border:1px solid #fca5a5;color:#991b1b}
 .details-box{margin-top:12px}.details-box summary{cursor:pointer;font-weight:900;color:#475467;padding:10px 0}
 #importInputBox,#importReportBox{max-height:690px;overflow:auto;padding-right:6px}
-.feedback{min-height:68px;font-family:Arial,sans-serif}.counter{display:inline-flex;align-items:center;gap:8px}.counter strong{font-size:18px}.transfer-batch{border:1px solid var(--border);border-radius:16px;padding:12px;margin-bottom:10px;background:#fff}.transfer-batch h3{margin:0 0 8px}.transfer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.feedback{min-height:68px;font-family:Arial,sans-serif}.counter{display:inline-flex;align-items:center;gap:8px}.counter strong{font-size:18px}.transfer-batch{border:1px solid var(--border);border-radius:16px;padding:12px;margin-bottom:10px;background:#fff}.transfer-batch h3{margin:0 0 8px}.transfer-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.pagination{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;padding:10px 0}.pagination button:disabled,button:disabled{opacity:.5;cursor:not-allowed;transform:none}
 
 /* Popup real pentru edit / istoric */
 body.modal-open{overflow:hidden}
@@ -301,6 +301,8 @@ body.modal-open{overflow:hidden}
       </div>
       <input id="verifySearch" placeholder="Caută..." oninput="renderVerification()">
       <div id="verifyInfo" class="notice"></div>
+      <button id="bulkDeleteBrownBtn" class="red" onclick="bulkDeleteEligibleBrown()">Șterge în masă MARO neactive la alt agent</button>
+      <p class="muted">Se șterg doar aparițiile MARO care nu au același telefon ACTIV la alt agent. Alte apariții ale telefonului rămân.</p>
     </div>
     <div class="card c8">
       <h2>Lista de verificat</h2>
@@ -337,13 +339,14 @@ body.modal-open{overflow:hidden}
   <div class="grid">
     <div class="card c4">
       <h2>Istoric transferuri</h2>
-      <p class="muted">Aici vezi fiecare batch de MARO transferat: către cine a plecat, de la cine a venit și lista de numere. Poți copia oricând lista ca să o lipești în Sheet.</p>
+      <p class="muted">Aici vezi cele mai recente transferuri MARO. Se păstrează maximum 100 de batch-uri, iar lista este împărțită pe pagini pentru încărcare rapidă.</p>
       <div id="transferHistoryStats" class="notice"></div>
     </div>
     <div class="card c8">
       <h2>Batch-uri transferate</h2>
       <div class="scroll">
         <div id="transferHistoryRows" style="padding:10px"></div>
+        <div id="transferHistoryPagination" class="pagination"></div>
       </div>
     </div>
   </div>
@@ -463,7 +466,17 @@ const KEY='verificare_clienti_render';
 let db=loadDb();
 let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
 let lastAddHtmlPaste='', lastAddTextPaste='', pendingAdd=null, currentModalClientId=null;
+const MAX_TRANSFER_BATCHES={{ max_transfer_batches|tojson }};
+const TRANSFER_HISTORY_PAGE_SIZE=10;
+let transferHistoryPage=1;
 
+function trimTransferHistory(items){
+  return (Array.isArray(items)?items:[])
+    .filter(t=>t&&typeof t==='object')
+    .map(t=>({...t,items:Array.isArray(t.items)?t.items.filter(i=>i&&typeof i==='object'):[],sourceCounter:t.sourceCounter&&typeof t.sourceCounter==='object'&&!Array.isArray(t.sourceCounter)?t.sourceCounter:{}}))
+    .sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))
+    .slice(-MAX_TRANSFER_BATCHES);
+}
 function el(id){return document.getElementById(id)}
 function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8)}
 function now(){return new Date().toLocaleString('ro-RO')}
@@ -546,10 +559,13 @@ function issueDetailForAck(type,row,detectedAgentId,c){
       .join(',');
   }
   if(type==='conflict' && c){
-    const active=activeAssignments(c);
-    const statuses=active.map(a=>`${a.agentId}:${a.agentId===detectedAgentId?row.status:a.status}`).sort();
-    if(!active.find(a=>a.agentId===detectedAgentId))statuses.push(`${detectedAgentId}:${row.status}`);
-    return statuses.join('|');
+    const active=activeAssignments(c).map(a=>a.agentId===detectedAgentId && a.status!=='safe'?{...a,status:row.status}:a);
+    if(!active.find(a=>a.agentId===detectedAgentId))active.push({agentId:detectedAgentId,status:row.status});
+    return active
+      .filter(a=>a.status==='active'||a.status==='red')
+      .map(a=>`${a.agentId}:${a.status}`)
+      .sort()
+      .join('|');
   }
   if(type==='change' && c){
     const as=assignmentOf(c,detectedAgentId);
@@ -608,12 +624,10 @@ function auditRowIssues(row,detectedAgentId,opts={}){
       issues.push({type:'active_other',label:'ACTIV LA ALT AGENT',score:90});
     }
 
-    const statuses=activeAs.map(a=>a.agentId===detectedAgentId?row.status:a.status);
-    if(!as)statuses.push(row.status);
+    const simulatedAssignments=activeAs.map(a=>a.agentId===detectedAgentId && a.status!=='safe'?{...a,status:row.status}:a);
+    if(!as)simulatedAssignments.push({agentId:detectedAgentId,status:row.status});
 
-    const conflict=statuses.length>1 &&
-      statuses.some(s=>s==='red'||s==='missing') &&
-      statuses.some(s=>s==='active'||s==='brown');
+    const conflict=assignmentsHaveConflict(simulatedAssignments);
 
     if(conflict){
       issues.push({type:'conflict',label:'CONFLICT POSIBIL',score:110});
@@ -815,17 +829,18 @@ function loadDb(){
   }
 }
 function normalizeDb(data){
-  data.employees=data.employees||data.friends||[];
-  data.clients=data.clients||[];
-  data.deletedEmployeeNames=data.deletedEmployeeNames||{};
+  data=data&&typeof data==='object'&&!Array.isArray(data)?data:{};
+  data.employees=(Array.isArray(data.employees)?data.employees:Array.isArray(data.friends)?data.friends:[]).filter(e=>e&&typeof e==='object');
+  data.clients=(Array.isArray(data.clients)?data.clients:[]).filter(c=>c&&typeof c==='object');
+  data.deletedEmployeeNames=data.deletedEmployeeNames&&typeof data.deletedEmployeeNames==='object'&&!Array.isArray(data.deletedEmployeeNames)?data.deletedEmployeeNames:{};
   data.deletedRecords=[];
-  data.transfers=data.transfers||[];
-  data.backups=(data.backups||[]).slice(-3);
-  data.archivedClients=(data.archivedClients||[]).map(normalizeArchived).filter(Boolean);
+  data.transfers=trimTransferHistory(data.transfers);
+  data.backups=(Array.isArray(data.backups)?data.backups:[]).filter(b=>b&&typeof b==='object').slice(-3);
+  data.archivedClients=(Array.isArray(data.archivedClients)?data.archivedClients:[]).map(normalizeArchived).filter(Boolean);
   data.clients=data.clients.map(c=>{
     if(Array.isArray(c.assignments)){
-      c.assignments=c.assignments.map(a=>({noAnswerCount:0,feedback:'',history:[],inSheet:(a.status==='active' && !a.transferredAt),...a}));
-      c.history=c.history||[];
+      c.assignments=c.assignments.filter(a=>a&&typeof a==='object').map(a=>({noAnswerCount:0,feedback:'',history:[],inSheet:(a.status==='active' && !a.transferredAt),...a}));
+      c.history=Array.isArray(c.history)?c.history:[];
       return c;
     }
     const agentId=c.currentAgentId||c.currentFriendId||c.originalAgentId||c.originalFriendId||'';
@@ -1035,10 +1050,26 @@ function brownHasEligibleAgent(c,a){
 function isBrownExhausted(c,a){
   return a && !a.transferredAt && a.status==='brown' && !brownHasEligibleAgent(c,a);
 }
+function assignmentsHaveConflict(assignments){
+  const active=(assignments||[]).filter(a=>a&&!a.transferredAt);
+  const activeAgents=new Set(active.filter(a=>a.status==='active').map(a=>a.agentId));
+  const redAgents=new Set(active.filter(a=>a.status==='red').map(a=>a.agentId));
+  return [...activeAgents].some(activeAgent=>[...redAgents].some(redAgent=>redAgent!==activeAgent));
+}
 function clientHasConflict(c){
-  const active=activeAssignments(c);
-  const statuses=active.map(a=>a.status);
-  return active.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown');
+  // Conflict = ACTIV la un agent și ROȘU la alt agent. MARO și DISPĂRUT nu creează conflict.
+  return assignmentsHaveConflict(activeAssignments(c));
+}
+function eligibleBrownAssignmentsForBulkDelete(){
+  const rows=[];
+  db.clients.forEach(c=>{
+    const activeAs=activeAssignments(c);
+    const hasActiveAtAnyAgent=activeAs.some(a=>a.status==='active');
+    if(hasActiveAtAnyAgent)return;
+    const brownAssignments=activeAs.filter(a=>a.status==='brown');
+    if(brownAssignments.length)rows.push({client:c,assignments:brownAssignments});
+  });
+  return rows;
 }
 function clientHasActiveElsewhere(c, sourceAgentId){
   return activeAssignments(c).some(a=>a.agentId!==sourceAgentId && a.status==='active');
@@ -1572,13 +1603,16 @@ function analyzeFullAudit(rows){
     const statusByPhone=new Map(rows.map(r=>[norm(r.phone),r.status]));
     db.clients.forEach(c=>{
       const active=activeAssignments(c);
-      let statuses=active.map(a=>{
-        if(a.agentId===detected && statusByPhone.has(norm(c.phone)))return statusByPhone.get(norm(c.phone));
-        if(missing.some(m=>m.client.id===c.id && m.as.id===a.id))return 'missing';
-        return a.status;
-      });
-      if(!active.find(a=>a.agentId===detected) && statusByPhone.has(norm(c.phone)))statuses.push(statusByPhone.get(norm(c.phone)));
-      if(statuses.length>1 && statuses.some(s=>s==='red'||s==='missing') && statuses.some(s=>s==='active'||s==='brown'))conflicts++;
+      const simulatedAssignments=active.map(a=>({
+        ...a,
+        status:a.agentId===detected && a.status!=='safe' && statusByPhone.has(norm(c.phone))
+          ? statusByPhone.get(norm(c.phone))
+          : (missing.some(m=>m.client.id===c.id && m.as.id===a.id)?'missing':a.status)
+      }));
+      if(!active.find(a=>a.agentId===detected) && statusByPhone.has(norm(c.phone))){
+        simulatedAssignments.push({agentId:detected,status:statusByPhone.get(norm(c.phone))});
+      }
+      if(assignmentsHaveConflict(simulatedAssignments))conflicts++;
     });
   }
   return{...det,known,extra,expected,missing,changed,unchanged,willAddAssignment,oldTransferredExists,conflicts};
@@ -1692,6 +1726,7 @@ async function applyFullAudit(){
   rows.forEach(r=>{
     const res=getOrCreateClientForImport(r,a.detected,'Adăugat automat din audit listă','Audit listă');
     let c=res.client;
+    const hadConflict=clientHasConflict(c);
     if(res.created)addedClients++;
     if(res.fromArchive)reactivatedArchive++;
 
@@ -1727,7 +1762,7 @@ async function applyFullAudit(){
     updated++;
     if(clientHasConflict(c)){
       conflicts++;
-      c.history.push({date:now(),text:`Conflict detectat între agenți: ${activeAssignments(c).map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`});
+      if(!hadConflict)c.history.push({date:now(),text:`Conflict detectat între agenți: ${activeAssignments(c).map(x=>empName(x.agentId)+'='+stxt(x.status)).join(', ')}.`});
     }
   });
 
@@ -1977,7 +2012,11 @@ function renderVerification(){
 
   const conflicts=db.clients.filter(clientHasConflict).length;
   const exhaustedCount=db.clients.filter(c=>activeAssignments(c).some(a=>isBrownExhausted(c,a))).length;
-  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b>`;
+  const bulkBrown=eligibleBrownAssignmentsForBulkDelete();
+  const bulkBrownAssignments=bulkBrown.reduce((sum,row)=>sum+row.assignments.length,0);
+  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b><br>MARO eligibile pentru ștergere în masă: <b>${bulkBrown.length}</b> telefoane / <b>${bulkBrownAssignments}</b> apariții`;
+  const bulkBtn=el('bulkDeleteBrownBtn');
+  if(bulkBtn)bulkBtn.disabled=bulkBrownAssignments===0;
 
   el('verifyRows').innerHTML=rows.length?rows.map(r=>{
     const c=r.client;
@@ -2020,6 +2059,29 @@ function renderVerification(){
       </td>
     </tr>`;
   }).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
+}
+async function bulkDeleteEligibleBrown(){
+  const eligible=eligibleBrownAssignmentsForBulkDelete();
+  const assignmentCount=eligible.reduce((sum,row)=>sum+row.assignments.length,0);
+  if(!assignmentCount)return alert('Nu există apariții MARO eligibile pentru ștergere.');
+  const phoneCount=eligible.length;
+  const ok=confirm(`Ștergi ${assignmentCount} apariții MARO de la ${phoneCount} telefoane? Numerele care sunt ACTIV la alt agent sunt protejate. Dacă un telefon mai are ROȘU, DISPĂRUT sau SAFE, acele apariții rămân.`);
+  if(!ok)return;
+
+  createAutoBackup(`Înainte de ștergerea în masă a ${assignmentCount} apariții MARO`);
+  const clientIdsToRemove=new Set();
+  eligible.forEach(({client,assignments})=>{
+    const ids=new Set(assignments.map(a=>a.id));
+    client.assignments=(client.assignments||[]).filter(a=>!ids.has(a.id));
+    client.history=client.history||[];
+    client.history.push({date:now(),text:`Ștergere în masă: ${ids.size} apariții MARO eliminate. Numerele ACTIVE la alt agent au fost protejate.`});
+    if(!client.assignments.length)clientIdsToRemove.add(client.id);
+  });
+  if(clientIdsToRemove.size){
+    db.clients=db.clients.filter(c=>!clientIdsToRemove.has(c.id));
+  }
+  const saved=await save();
+  if(saved)alert(`Ștergere finalizată: ${assignmentCount} apariții MARO eliminate de la ${phoneCount} telefoane.`);
 }
 function findAs(clientId,asId){const c=db.clients.find(x=>x.id===clientId);return[c,c?.assignments?.find(a=>a.id===asId)]}
 function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!a)return;a.noAnswerCount=Math.max(0,(a.noAnswerCount||0)+delta);a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}
@@ -2164,6 +2226,8 @@ function transferBrown(){
       count:items.length,
       items
     });
+    db.transfers=trimTransferHistory(db.transfers);
+    transferHistoryPage=1;
   }
 
   save();
@@ -2182,39 +2246,57 @@ function transferBrown(){
 
 /* Istoric transferuri */
 function transferTextFromItems(items){
-  return (items||[]).map(i=>`${i.phone}\t${i.note||''}`).join('\n');
+  return (Array.isArray(items)?items:[]).filter(i=>i&&i.phone).map(i=>`${i.phone}\t${i.note||''}`).join('\n');
 }
 function copyTransfer(transferId){
   const t=(db.transfers||[]).find(x=>x.id===transferId);
   if(!t)return alert('Transfer inexistent.');
   copyTextToClipboard(transferTextFromItems(t.items),`Lista transferului către ${empName(t.toAgentId)} a fost copiată.`);
 }
+function goToTransferHistoryPage(page){
+  transferHistoryPage=Math.max(1,Number(page)||1);
+  renderTransferHistory();
+}
 function renderTransferHistory(){
   const box=el('transferHistoryRows');
+  const pagination=el('transferHistoryPagination');
   if(!box)return;
-  db.transfers=db.transfers||[];
+  db.transfers=trimTransferHistory(db.transfers);
   const rows=db.transfers.slice().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
-  const total=rows.reduce((s,t)=>s+(t.items?.length||0),0);
-  el('transferHistoryStats').innerHTML=`Batch-uri: <b>${rows.length}</b><br>Numere transferate total: <b>${total}</b>`;
+  const total=rows.reduce((sum,t)=>sum+(t.items?.length||0),0);
+  const totalPages=Math.max(1,Math.ceil(rows.length/TRANSFER_HISTORY_PAGE_SIZE));
+  transferHistoryPage=Math.min(Math.max(1,transferHistoryPage),totalPages);
+  const startIndex=(transferHistoryPage-1)*TRANSFER_HISTORY_PAGE_SIZE;
+  const pageRows=rows.slice(startIndex,startIndex+TRANSFER_HISTORY_PAGE_SIZE);
+  el('transferHistoryStats').innerHTML=`Batch-uri păstrate: <b>${rows.length}/${MAX_TRANSFER_BATCHES}</b><br>Numere transferate în istoricul păstrat: <b>${total}</b><br>Pagina <b>${transferHistoryPage}</b> din <b>${totalPages}</b>`;
 
   if(!rows.length){
     box.innerHTML='<div class="notice">Nu există transferuri încă.</div>';
+    if(pagination)pagination.innerHTML='';
     return;
   }
 
-  box.innerHTML=rows.map(t=>{
-    const sources=Object.entries(t.sourceCounter||{}).map(([id,c])=>`${empName(id)}: ${c}`).join(' | ')||'—';
-    const nums=(t.items||[]).slice(0,25).map(i=>`${i.phone}${i.note?' — '+esc(i.note):''}`).join('<br>');
-    const more=(t.items||[]).length>25?`<br><span class="muted">+ încă ${(t.items||[]).length-25} numere</span>`:'';
+  box.innerHTML=pageRows.map(t=>{
+    const sources=Object.entries(t.sourceCounter||{}).map(([id,count])=>`${empName(id)}: ${count}`).join(' | ')||'—';
+    const previewItems=(t.items||[]).slice(0,8);
+    const nums=previewItems.map(i=>`${esc(i.phone)}${i.note?' — '+esc(i.note):''}`).join('<br>');
+    const more=(t.items||[]).length>8?`<br><span class="muted">+ încă ${(t.items||[]).length-8} numere; folosește „Copiază lista” pentru lista completă</span>`:'';
     return `<div class="transfer-batch">
       <h3>Transfer către ${esc(empName(t.toAgentId))} <span class="pill brown">${t.count||t.items?.length||0} numere</span></h3>
       <div class="muted">${esc(t.createdAtRo||'')}<br>Surse: ${esc(sources)}</div>
-      <div class="notice">${nums}${more}</div>
+      <div class="notice">${nums||'<span class="muted">Fără numere salvate în batch.</span>'}${more}</div>
       <div class="transfer-actions">
         <button class="small green" onclick="copyTransfer('${t.id}')">Copiază lista</button>
       </div>
     </div>`;
   }).join('');
+
+  if(pagination){
+    pagination.innerHTML=`
+      <button class="small secondary" onclick="goToTransferHistoryPage(${transferHistoryPage-1})" ${transferHistoryPage<=1?'disabled':''}>Înapoi</button>
+      <span class="muted">Pagina <b>${transferHistoryPage}</b> / <b>${totalPages}</b></span>
+      <button class="small secondary" onclick="goToTransferHistoryPage(${transferHistoryPage+1})" ${transferHistoryPage>=totalPages?'disabled':''}>Înainte</button>`;
+  }
 }
 
 /* Backup */

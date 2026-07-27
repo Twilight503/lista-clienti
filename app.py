@@ -3,6 +3,7 @@ import json
 from copy import deepcopy
 from datetime import datetime, timezone, timedelta
 from functools import wraps
+from urllib.parse import urlsplit
 
 from bson import json_util
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -13,12 +14,17 @@ MONGO_URI = os.environ.get("MONGO_URI", "").strip()
 DB_NAME = os.environ.get("DB_NAME", "test")
 COLLECTION_NAME = os.environ.get("COLLECTION_NAME", "Clienti maro/rosu")
 STATE_ID = os.environ.get("STATE_ID", "state")
+MAX_TRANSFER_BATCHES = 100
 
 if not MONGO_URI:
     raise RuntimeError("Lipsește MONGO_URI. Pune URI-ul MongoDB în Environment Variables pe Render.")
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "schimba-asta-in-render")
+# Fără SECRET_KEY configurat, folosim o cheie aleatoare la fiecare pornire în locul
+# unei valori publice/predictibile. Pe Render este recomandat în continuare SECRET_KEY stabil.
+app.secret_key = os.environ.get("SECRET_KEY", "").strip() or os.urandom(32)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 mongo_client = MongoClient(MONGO_URI)
 mongo_db = mongo_client[DB_NAME]
@@ -47,7 +53,10 @@ def _parse_iso(dt):
     if not dt or not isinstance(dt, str):
         return None
     try:
-        return datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
     except Exception:
         return None
 
@@ -77,6 +86,21 @@ def purge_expired_archived_clients(items):
 
 def phone_key(value):
     return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+def trim_transfer_history(items):
+    if not isinstance(items, list):
+        return []
+
+    indexed = []
+    fallback = datetime.min.replace(tzinfo=timezone.utc)
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        indexed.append((_parse_iso(item.get("createdAt")) or fallback, index, item))
+
+    indexed.sort(key=lambda row: (row[0], row[1]))
+    return [item for _, _, item in indexed[-MAX_TRANSFER_BATCHES:]]
 
 
 def merge_unique_history(*lists):
@@ -176,21 +200,23 @@ def protect_archived_clients(incoming_state, current_doc, allow_archive_shrink=F
 
 
 def sanitize_state(state):
-    """Ține documentul Mongo mic și curat."""
+    """Ține documentul Mongo mic, coerent și sub limita practică de dimensiune."""
     if not isinstance(state, dict):
         state = empty_state()
 
     state.setdefault("version", 12)
     state.setdefault("createdAt", utc_now())
-    state.setdefault("employees", [])
-    state.setdefault("deletedEmployeeNames", {})
-    state.setdefault("clients", [])
-    state.setdefault("transfers", [])
-    state.setdefault("archivedClients", [])
+    state["employees"] = state.get("employees") if isinstance(state.get("employees"), list) else []
+    state["deletedEmployeeNames"] = state.get("deletedEmployeeNames") if isinstance(state.get("deletedEmployeeNames"), dict) else {}
+    state["clients"] = state.get("clients") if isinstance(state.get("clients"), list) else []
+    state["archivedClients"] = state.get("archivedClients") if isinstance(state.get("archivedClients"), list) else []
 
     # Nu păstrăm arhivă de ștergeri în Mongo. Ștergerile sunt definitive în UI.
     state["deletedRecords"] = []
-    state["archivedClients"] = purge_expired_archived_clients(state.get("archivedClients", []))
+    state["archivedClients"] = purge_expired_archived_clients(state["archivedClients"])
+
+    # Istoricul transferurilor este folosit în UI, dar nu trebuie să crească nelimitat.
+    state["transfers"] = trim_transfer_history(state.get("transfers", []))
 
     # Backup-urile automate sunt copii complete; păstrăm doar ultimele 3 ca să nu umfle baza.
     backups = state.get("backups", [])
@@ -236,6 +262,16 @@ def get_or_create_doc():
     state["_rev"] = 1
     collection.insert_one(state)
     return collection.find_one({"_id": STATE_ID})
+
+
+def safe_next_path(target):
+    """Acceptă doar redirecturi interne, pentru a evita open redirect după login."""
+    if not isinstance(target, str) or not target.startswith("/"):
+        return None
+    parsed = urlsplit(target)
+    if parsed.scheme or parsed.netloc or target.startswith("//"):
+        return None
+    return target
 
 
 def require_login(fn):
@@ -298,7 +334,7 @@ def login_post():
 
     if request.form.get("password") == APP_PASSWORD:
         session["logged_in"] = True
-        return redirect(request.args.get("next") or url_for("index"))
+        return redirect(safe_next_path(request.args.get("next")) or url_for("index"))
 
     return "Parolă greșită", 401
 
@@ -314,7 +350,12 @@ def logout():
 def index():
     doc = get_or_create_doc()
     state, rev = public_state(doc)
-    return render_template("index.html", initial_db=state, rev=rev)
+    return render_template(
+        "index.html",
+        initial_db=state,
+        rev=rev,
+        max_transfer_batches=MAX_TRANSFER_BATCHES,
+    )
 
 
 @app.get("/api/state")
@@ -330,7 +371,10 @@ def api_get_state():
 def api_save_state():
     payload = request.get_json(silent=True) or {}
     new_state = payload.get("db")
-    client_rev = int(payload.get("rev", 0) or 0)
+    try:
+        client_rev = int(payload.get("rev", 0) or 0)
+    except (TypeError, ValueError):
+        return "Payload invalid: rev trebuie să fie număr întreg.", 400
 
     if not isinstance(new_state, dict):
         return "Payload invalid: db trebuie să fie obiect JSON.", 400

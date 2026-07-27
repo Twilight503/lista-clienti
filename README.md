@@ -162,3 +162,8 @@ Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre est
 - Istoricul transferurilor păstrează maximum ultimele 100 de batch-uri.
 - Istoricul transferurilor afișează 10 batch-uri pe pagină și doar 8 numere ca preview pentru fiecare batch; lista completă rămâne disponibilă prin butonul de copiere.
 - Datele importate sunt normalizate mai strict, iar redirectul după login acceptă doar pagini interne.
+
+
+## Hotfix inițializare bază
+- Limitele istoricului sunt inițializate înainte de normalizarea bazei din MongoDB.
+- Nu este necesară conversia datelor existente pentru această eroare.

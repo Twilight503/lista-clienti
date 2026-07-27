@@ -463,12 +463,12 @@ body.modal-open{overflow:hidden}
 window.__INITIAL_DB__ = {{ initial_db|tojson }};
 window.__INITIAL_REV__ = {{ rev|tojson }};
 const KEY='verificare_clienti_render';
-let db=loadDb();
-let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
-let lastAddHtmlPaste='', lastAddTextPaste='', pendingAdd=null, currentModalClientId=null;
 const MAX_TRANSFER_BATCHES={{ max_transfer_batches|tojson }};
 const TRANSFER_HISTORY_PAGE_SIZE=10;
 let transferHistoryPage=1;
+let db=loadDb();
+let lastHtmlPaste='', lastTextPaste='', pendingImport=null;
+let lastAddHtmlPaste='', lastAddTextPaste='', pendingAdd=null, currentModalClientId=null;
 
 function unwrapMongoDate(value){
   let raw=value;
@@ -832,7 +832,7 @@ function loadDb(){
   }catch(e){
     console.error(e);
     window.__DB_LOAD_FAILED__=true;
-    alert('Datele au fost găsite în MongoDB, dar o înregistrare veche are un format incompatibil. Salvarea este blocată pentru a proteja baza.');
+    alert('A apărut o eroare la inițializarea aplicației. Salvarea este blocată pentru protecția bazei. Reîncarcă pagina după actualizarea aplicației.');
     return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[],archivedClients:[]};
   }
 }

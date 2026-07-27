@@ -470,11 +470,18 @@ const MAX_TRANSFER_BATCHES={{ max_transfer_batches|tojson }};
 const TRANSFER_HISTORY_PAGE_SIZE=10;
 let transferHistoryPage=1;
 
+function unwrapMongoDate(value){
+  let raw=value;
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&Object.prototype.hasOwnProperty.call(raw,'$date'))raw=raw.$date;
+  if(raw&&typeof raw==='object'&&!Array.isArray(raw)&&Object.prototype.hasOwnProperty.call(raw,'$numberLong'))raw=Number(raw.$numberLong);
+  return raw;
+}
 function trimTransferHistory(items){
+  const fallback='1970-01-01T00:00:00.000Z';
   return (Array.isArray(items)?items:[])
     .filter(t=>t&&typeof t==='object')
-    .map(t=>({...t,items:Array.isArray(t.items)?t.items.filter(i=>i&&typeof i==='object'):[],sourceCounter:t.sourceCounter&&typeof t.sourceCounter==='object'&&!Array.isArray(t.sourceCounter)?t.sourceCounter:{}}))
-    .sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))
+    .map(t=>({...t,createdAt:safeIsoDate(unwrapMongoDate(t.createdAt),fallback),items:Array.isArray(t.items)?t.items.filter(i=>i&&typeof i==='object'):[],sourceCounter:t.sourceCounter&&typeof t.sourceCounter==='object'&&!Array.isArray(t.sourceCounter)?t.sourceCounter:{}}))
+    .sort((a,b)=>String(a.createdAt||fallback).localeCompare(String(b.createdAt||fallback)))
     .slice(-MAX_TRANSFER_BATCHES);
 }
 function el(id){return document.getElementById(id)}
@@ -482,9 +489,9 @@ function uid(p){return p+'_'+Date.now().toString(36)+'_'+Math.random().toString(
 function now(){return new Date().toLocaleString('ro-RO')}
 
 function safeIsoDate(value,fallback){
-  const d=new Date(value||'');
+  const d=new Date(unwrapMongoDate(value)||'');
   if(Number.isFinite(d.getTime()))return d.toISOString();
-  const f=new Date(fallback||new Date().toISOString());
+  const f=new Date(unwrapMongoDate(fallback)||new Date().toISOString());
   return Number.isFinite(f.getTime())?f.toISOString():new Date().toISOString();
 }
 function addDaysIso(dateIso,days){
@@ -824,7 +831,8 @@ function loadDb(){
     return normalizeDb(window.__INITIAL_DB__ || {});
   }catch(e){
     console.error(e);
-    alert('Nu am putut încărca baza din MongoDB.');
+    window.__DB_LOAD_FAILED__=true;
+    alert('Datele au fost găsite în MongoDB, dar o înregistrare veche are un format incompatibil. Salvarea este blocată pentru a proteja baza.');
     return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[],archivedClients:[]};
   }
 }
@@ -944,6 +952,10 @@ function schedulePersist(opts={}){
 }
 
 async function persistDb(opts={}){
+  if(window.__DB_LOAD_FAILED__){
+    alert('Salvarea este blocată pentru a nu suprascrie baza. Reîncarcă pagina după aplicarea hotfixului.');
+    return false;
+  }
   if(opts.allowArchiveShrink)pendingArchiveShrink=true;
   if(booting)return true;
   if(isSaving){

@@ -6,7 +6,7 @@ Aplicația salvează baza în MongoDB, nu în localStorage.
 
 MONGO_URI=URI-ul tău MongoDB
 DB_NAME=test
-COLLECTION_NAME=Clienti maro/rosu
+COLLECTION_NAME="Clienti maro/rosu"
 APP_PASSWORD=parola cu care intri pe site
 SECRET_KEY=un text lung/random
 

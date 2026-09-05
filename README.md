@@ -2,6 +2,8 @@
 
 Aplicația salvează baza în MongoDB, nu în localStorage.
 
+> **Securitate:** nu pune niciodată `.env`, arhive de deploy sau istoricul `.git` într-o arhivă trimisă altcuiva. O versiune veche a proiectului a avut valori reale într-un `.env.example`; schimbă parola aplicației și orice parolă MongoDB veche care ar mai putea fi validă. Arhivele noi trebuie construite fără `.env`, `.git`, loguri și cache-uri.
+
 ## Environment Variables pe Render
 
 MONGO_URI=URI-ul tău MongoDB
@@ -167,3 +169,41 @@ Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre est
 ## Hotfix inițializare bază
 - Limitele istoricului sunt inițializate înainte de normalizarea bazei din MongoDB.
 - Nu este necesară conversia datelor existente pentru această eroare.
+
+## Actualizare arhivare rapidă și stabilitate
+
+- În pagina **Verificare** există acum două acțiuni separate:
+  - `Arhivează toate MARO` mută în Arhivă numai telefoanele ale căror apariții curente sunt toate MARO;
+  - `Arhivează toate ROȘII` mută telefoanele cu ROȘU care mai pot avea doar apariții DISPĂRUT.
+- Telefoanele care au și ACTIV, SAFE sau statusuri amestecate sunt protejate automat și nu sunt arhivate în masă.
+- Înaintea fiecărei arhivări în masă se creează un backup automat; numerele rămân 90 de zile în Arhivă.
+- Vechea ștergere a aparițiilor MARO a rămas disponibilă separat, într-o zonă marcată ca acțiune de ștergere.
+- Contorul `Nu răspunde` și feedback-ul se editează acum separat pentru fiecare apariție/agent din Verificare.
+- Transferul MARO afișează succesul și copiază lista numai după confirmarea salvării în MongoDB.
+- Editările nesalvate sunt protejate la închiderea paginii, salvările au timeout, iar ștergerea definitivă din Arhivă își păstrează permisiunea specială și după o eroare de rețea.
+- Resetarea bazei păstrează revizia crescătoare și refuză resetarea dintr-o pagină veche.
+- Documentele Mongo vechi fără `_rev` sunt migrate automat, inclusiv când rulează mai mulți workeri Gunicorn.
+- Datele BSON/Extended JSON sunt transformate sigur în ISO, iar importurile corupte sau duplicate sunt normalizate înainte de folosire.
+- Backendul verifică dimensiunea BSON înainte de salvare și refuză clar o stare care ar depăși limita MongoDB.
+- A fost readăugat butonul **Ieșire** când accesul cu parolă este activ.
+
+## Teste
+
+Rulează verificările backend cu:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Rulează testul logicii din interfață (inclusiv arhivarea MARO/ROȘU și protecția conflictelor) cu:
+
+```bash
+node tests/frontend_logic_smoke.js
+```
+
+Verificare rapidă de sintaxă:
+
+```bash
+python3 -m py_compile app.py
+sed -n '/<script>/,/<\/script>/p' templates/index.html | sed '1d;$d;s/{{ initial_db|tojson }}/{}/;s/{{ rev|tojson }}/0/;s/{{ max_transfer_batches|tojson }}/100/' | node --check
+```

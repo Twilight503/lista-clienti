@@ -195,6 +195,12 @@ Logica rămâne pe MARO transferabile, dar textul vizibil din carduri/filtre est
 - Dacă salvarea în MongoDB eșuează, arhivarea în masă este anulată și starea locală revine automat.
 - Pachetul de livrare folosește exact folderul `Lista-clienti-verificare`, ca să se suprapună corect peste clona Git.
 
+## Versiunea 05.09.2026-3
+
+- Panoul mare de arhivare a fost eliminat.
+- În cardul din stânga al paginii **Verificare** rămân numai două butoane compacte: `Arhivează toate MARO` și `Arhivează toate ROȘII`.
+- Opțiunea separată pentru ștergerea aparițiilor MARO a fost eliminată din interfață.
+
 ## Teste
 
 Rulează verificările backend cu:

@@ -158,7 +158,6 @@ async function main() {
       assert(bulkArchiveProtectedCount('red') === 1, 'Protecția ROȘU nu este corectă.');
       assert(el('bulkArchiveBrownBtn').textContent.includes('(3)'), 'Contorul butonului MARO nu este randat.');
       assert(el('bulkArchiveRedBtn').textContent.includes('(4)'), 'Contorul butonului ROȘU nu este randat.');
-      assert(el('bulkArchiveSummary').innerHTML.includes('4 ROȘII'), 'Rezumatul vizibil de arhivare nu este randat.');
       assert(auditRisk({ expected: Array(10), missing: Array(3) }, Array(7)).risky, 'O listă mică incompletă nu este blocată.');
 
       el('verifyStatusFilter').value = 'red';

@@ -119,21 +119,9 @@ body.modal-open{overflow:hidden}
 .verify-counter{display:flex;align-items:center;gap:8px;white-space:nowrap;margin:3px 0 8px}
 .verify-counter strong{font-size:18px;min-width:18px;text-align:center}
 .feedback-mini{min-height:58px;font-family:Arial,sans-serif;font-size:13px;padding:8px 10px}
-.bulk-actions{display:grid;gap:8px;margin-top:10px}
-.bulk-archive-panel{
-  border:2px solid #93c5fd;
-  background:linear-gradient(135deg,#eff6ff 0%,#fff 48%,#fff7ed 100%);
-  box-shadow:0 18px 42px rgba(37,99,235,.14);
-}
-.bulk-archive-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
-.release-pill{display:inline-flex;align-items:center;border-radius:999px;padding:6px 10px;background:#dbeafe;color:#1d4ed8;font-size:11px;font-weight:1000;letter-spacing:.04em}
-.bulk-actions.prominent{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.bulk-actions.prominent button{min-height:62px;font-size:16px;box-shadow:0 10px 22px rgba(15,23,42,.15)}
-.bulk-actions.prominent button.brown{border:2px solid #6b3f18}
-.bulk-actions.prominent button.red{border:2px solid #991b1b}
-@media(max-width:700px){.bulk-actions.prominent{grid-template-columns:1fr}}
-.danger-zone{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
-.danger-zone summary{cursor:pointer;color:#991b1b;font-weight:900}
+.verify-archive-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+.verify-archive-actions button{width:100%;padding:10px 8px;font-size:13px;white-space:normal}
+@media(max-width:520px){.verify-archive-actions{grid-template-columns:1fr}}
 
 
 .tabs{margin-top:-6px}
@@ -309,21 +297,6 @@ body.modal-open{overflow:hidden}
 
 <section id="tab-verify" class="hidden">
   <div class="grid">
-    <div class="card c12 bulk-archive-panel">
-      <div class="bulk-archive-head">
-        <div>
-          <span class="release-pill">OPȚIUNI NOI · VERSIUNEA 05.09.2026-2</span>
-          <h2 style="margin-top:10px">Arhivare instant din Verificare</h2>
-          <p class="muted" style="margin:0">Muți dintr-un singur click numerele în Arhivă și nu mai intră la transfer sau verificare.</p>
-        </div>
-      </div>
-      <div class="bulk-actions prominent">
-        <button id="bulkArchiveBrownBtn" class="brown" onclick="bulkArchiveStatus('brown')">Arhivează toate MARO</button>
-        <button id="bulkArchiveRedBtn" class="red" onclick="bulkArchiveStatus('red')">Arhivează toate ROȘII</button>
-      </div>
-      <div id="bulkArchiveSummary" class="notice">Se calculează numerele disponibile pentru arhivare...</div>
-      <p class="muted" style="margin-bottom:0"><b>MARO:</b> include numerele care au numai MARO și eventual DISPĂRUT. <b>ROȘU:</b> include toate numerele cu cel puțin un ROȘU, inclusiv combinațiile MARO + ROȘU, dacă nu sunt ACTIVE sau SAFE la alt agent. Înainte de aplicare apare o confirmare și se creează automat backup.</p>
-    </div>
     <div class="card c4">
       <h2>Verificare</h2>
       <p class="muted">Aici intră doar ROȘU, DISPĂRUT, CONFLICT și MARO epuizat.</p>
@@ -339,11 +312,10 @@ body.modal-open{overflow:hidden}
       </div>
       <input id="verifySearch" placeholder="Caută..." oninput="renderVerification()">
       <div id="verifyInfo" class="notice"></div>
-      <details class="danger-zone">
-        <summary>Ștergere apariții MARO</summary>
-        <p class="muted">Această acțiune șterge doar aparițiile MARO, fără să le păstreze în Arhivă. Folosește-o doar dacă asta dorești.</p>
-        <button id="bulkDeleteBrownBtn" class="secondary" onclick="bulkDeleteEligibleBrown()">Șterge aparițiile MARO eligibile</button>
-      </details>
+      <div class="verify-archive-actions">
+        <button id="bulkArchiveBrownBtn" class="brown" onclick="bulkArchiveStatus('brown')">Arhivează toate MARO</button>
+        <button id="bulkArchiveRedBtn" class="red" onclick="bulkArchiveStatus('red')">Arhivează toate ROȘII</button>
+      </div>
     </div>
     <div class="card c8">
       <h2>Lista de verificat</h2>
@@ -1286,17 +1258,6 @@ function assignmentsHaveConflict(assignments){
 function clientHasConflict(c){
   // Conflict = ACTIV la un agent și ROȘU la alt agent. MARO și DISPĂRUT nu creează conflict.
   return assignmentsHaveConflict(activeAssignments(c));
-}
-function eligibleBrownAssignmentsForBulkDelete(){
-  const rows=[];
-  db.clients.forEach(c=>{
-    const activeAs=activeAssignments(c);
-    const hasActiveAtAnyAgent=activeAs.some(a=>a.status==='active');
-    if(hasActiveAtAnyAgent)return;
-    const brownAssignments=activeAs.filter(a=>a.status==='brown');
-    if(brownAssignments.length)rows.push({client:c,assignments:brownAssignments});
-  });
-  return rows;
 }
 function bulkArchiveCandidates(kind){
   return db.clients.filter(c=>{
@@ -2247,20 +2208,12 @@ function renderVerification(){
   const archiveRed=bulkArchiveCandidates('red');
   const protectedBrown=bulkArchiveProtectedCount('brown');
   const protectedRed=bulkArchiveProtectedCount('red');
-  const bulkBrown=eligibleBrownAssignmentsForBulkDelete();
-  const bulkBrownAssignments=bulkBrown.reduce((sum,row)=>sum+row.assignments.length,0);
   el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b><br>
     Arhivare rapidă: <b>${archiveBrown.length}</b> MARO și <b>${archiveRed.length}</b> ROȘII | Protejate fiind amestecate cu alte statusuri: <b>${protectedBrown}</b> MARO / <b>${protectedRed}</b> ROȘII`;
-  const bulkSummary=el('bulkArchiveSummary');
-  if(bulkSummary){
-    bulkSummary.innerHTML=`Gata de arhivat acum: <b>${archiveBrown.length} MARO</b> și <b>${archiveRed.length} ROȘII</b>.<br>Protejate pentru că sunt ACTIVE/SAFE sau au un status incompatibil: <b>${protectedBrown} MARO</b> și <b>${protectedRed} ROȘII</b>.`;
-  }
   const archiveBrownBtn=el('bulkArchiveBrownBtn');
   if(archiveBrownBtn){archiveBrownBtn.disabled=bulkArchiveRunning||archiveBrown.length===0;archiveBrownBtn.textContent=`Arhivează toate MARO (${archiveBrown.length})`}
   const archiveRedBtn=el('bulkArchiveRedBtn');
   if(archiveRedBtn){archiveRedBtn.disabled=bulkArchiveRunning||archiveRed.length===0;archiveRedBtn.textContent=`Arhivează toate ROȘII (${archiveRed.length})`}
-  const bulkBtn=el('bulkDeleteBrownBtn');
-  if(bulkBtn){bulkBtn.disabled=bulkArchiveRunning||bulkBrownAssignments===0;bulkBtn.textContent=`Șterge aparițiile MARO eligibile (${bulkBrownAssignments})`}
 
   el('verifyRows').innerHTML=rows.length?rows.map(r=>{
     const c=r.client;
@@ -2339,29 +2292,6 @@ async function bulkArchiveStatus(kind){
   }
   renderVerification();
   if(saved)alert(`Arhivare finalizată: ${archived} telefoane ${labelText} au fost mutate în Arhivă pentru 90 de zile. ${protectedCount?protectedCount+' au rămas protejate.':''}`);
-}
-async function bulkDeleteEligibleBrown(){
-  const eligible=eligibleBrownAssignmentsForBulkDelete();
-  const assignmentCount=eligible.reduce((sum,row)=>sum+row.assignments.length,0);
-  if(!assignmentCount)return alert('Nu există apariții MARO eligibile pentru ștergere.');
-  const phoneCount=eligible.length;
-  const ok=confirm(`Ștergi ${assignmentCount} apariții MARO de la ${phoneCount} telefoane? Numerele care sunt ACTIV la alt agent sunt protejate. Dacă un telefon mai are ROȘU, DISPĂRUT sau SAFE, acele apariții rămân.`);
-  if(!ok)return;
-
-  createAutoBackup(`Înainte de ștergerea în masă a ${assignmentCount} apariții MARO`);
-  const clientIdsToRemove=new Set();
-  eligible.forEach(({client,assignments})=>{
-    const ids=new Set(assignments.map(a=>a.id));
-    client.assignments=(client.assignments||[]).filter(a=>!ids.has(a.id));
-    client.history=client.history||[];
-    client.history.push({date:now(),text:`Ștergere în masă: ${ids.size} apariții MARO eliminate. Numerele ACTIVE la alt agent au fost protejate.`});
-    if(!client.assignments.length)clientIdsToRemove.add(client.id);
-  });
-  if(clientIdsToRemove.size){
-    db.clients=db.clients.filter(c=>!clientIdsToRemove.has(c.id));
-  }
-  const saved=await save();
-  if(saved)alert(`Ștergere finalizată: ${assignmentCount} apariții MARO eliminate de la ${phoneCount} telefoane.`);
 }
 function findAs(clientId,asId){const c=db.clients.find(x=>x.id===clientId);return[c,c?.assignments?.find(a=>a.id===asId)]}
 function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!c||!a)return;a.noAnswerCount=Math.max(0,Math.floor(finiteNumber(a.noAnswerCount,0,0)+finiteNumber(delta,0,-100000)));a.history=Array.isArray(a.history)?a.history:[];a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}

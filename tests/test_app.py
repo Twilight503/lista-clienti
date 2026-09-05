@@ -208,8 +208,9 @@ class AppStateTests(unittest.TestCase):
         html=response.get_data(as_text=True)
         self.assertIn('id="bulkArchiveBrownBtn"', html)
         self.assertIn('id="bulkArchiveRedBtn"', html)
-        self.assertIn('id="bulkArchiveSummary"', html)
-        self.assertIn('OPȚIUNI NOI · VERSIUNEA 05.09.2026-2', html)
+        self.assertIn('class="verify-archive-actions"', html)
+        self.assertNotIn('id="bulkArchiveSummary"', html)
+        self.assertNotIn('bulkDeleteBrownBtn', html)
         self.assertIn('href="/logout"', html)
 
     def test_oversized_state_is_rejected_without_overwrite(self):

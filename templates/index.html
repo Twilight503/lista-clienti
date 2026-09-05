@@ -16,13 +16,6 @@
 body{margin:0;font-family:Arial,sans-serif;background:var(--bg);color:var(--text)}
 header{background:linear-gradient(135deg,#0f172a,#1e3a8a);color:#fff;padding:24px 18px}
 header>div,main{max-width:1450px;margin:auto}
-.brand-wrap{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
-.brand-badge{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;background:linear-gradient(135deg,#2563eb,#0ea5e9);font-weight:1000;box-shadow:0 10px 24px rgba(14,165,233,.28)}
-.brand-title{grid-column:2;margin:0}
-.brand-wrap .subtitle{grid-column:2}
-.logout-link{grid-column:3;grid-row:1/span 2;align-self:center;color:#fff;text-decoration:none;font-size:13px;font-weight:900;padding:9px 12px;border:1px solid rgba(255,255,255,.3);border-radius:12px;background:rgba(255,255,255,.08)}
-.logout-link:hover{background:rgba(255,255,255,.16)}
-@media(max-width:640px){.brand-wrap{grid-template-columns:auto 1fr}.logout-link{grid-column:1/span 2;grid-row:3;justify-self:start}.brand-wrap .subtitle{grid-column:1/span 2}}
 h1{margin:0 0 7px;font-size:28px;letter-spacing:-.04em}
 .subtitle{margin:0;color:#dbeafe;line-height:1.45;max-width:1060px}
 main{padding:16px}
@@ -119,9 +112,6 @@ body.modal-open{overflow:hidden}
 .verify-counter{display:flex;align-items:center;gap:8px;white-space:nowrap;margin:3px 0 8px}
 .verify-counter strong{font-size:18px;min-width:18px;text-align:center}
 .feedback-mini{min-height:58px;font-family:Arial,sans-serif;font-size:13px;padding:8px 10px}
-.bulk-actions{display:grid;gap:8px;margin-top:10px}
-.danger-zone{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
-.danger-zone summary{cursor:pointer;color:#991b1b;font-weight:900}
 
 
 .tabs{margin-top:-6px}
@@ -175,7 +165,6 @@ body.modal-open{overflow:hidden}
     <div class="brand-badge" aria-label="VC logo">VC</div>
     <h1 class="brand-title">Verificare Clienți</h1>
     <p class="subtitle">Import complet din Google Sheets, audit automat pentru numere dispărute, verificare, transfer MARO și istoric pe agenți.</p>
-    {% if auth_enabled %}<a class="logout-link" href="{{ url_for('logout') }}">Ieșire</a>{% endif %}
   </div>
 </header>
 
@@ -312,17 +301,8 @@ body.modal-open{overflow:hidden}
       </div>
       <input id="verifySearch" placeholder="Caută..." oninput="renderVerification()">
       <div id="verifyInfo" class="notice"></div>
-      <h3>Arhivare rapidă</h3>
-      <div class="bulk-actions">
-        <button id="bulkArchiveBrownBtn" class="brown" onclick="bulkArchiveStatus('brown')">Arhivează toate MARO</button>
-        <button id="bulkArchiveRedBtn" class="red" onclick="bulkArchiveStatus('red')">Arhivează toate ROȘII</button>
-      </div>
-      <p class="muted">Acțiunile sunt globale, indiferent de filtrele de sus. MARO: se arhivează telefoanele ale căror apariții curente sunt toate MARO. ROȘU: se arhivează telefoanele care au ROȘU și cel mult DISPĂRUT. Numerele cu ACTIV, SAFE ori statusuri amestecate sunt protejate și rămân pentru verificare.</p>
-      <details class="danger-zone">
-        <summary>Ștergere apariții MARO</summary>
-        <p class="muted">Această acțiune șterge doar aparițiile MARO, fără să le păstreze în Arhivă. Folosește-o doar dacă asta dorești.</p>
-        <button id="bulkDeleteBrownBtn" class="secondary" onclick="bulkDeleteEligibleBrown()">Șterge aparițiile MARO eligibile</button>
-      </details>
+      <button id="bulkDeleteBrownBtn" class="red" onclick="bulkDeleteEligibleBrown()">Șterge în masă MARO neactive la alt agent</button>
+      <p class="muted">Se șterg doar aparițiile MARO care nu au același telefon ACTIV la alt agent. Alte apariții ale telefonului rămân.</p>
     </div>
     <div class="card c8">
       <h2>Lista de verificat</h2>
@@ -514,25 +494,9 @@ function safeIsoDate(value,fallback){
   const f=new Date(unwrapMongoDate(fallback)||new Date().toISOString());
   return Number.isFinite(f.getTime())?f.toISOString():new Date().toISOString();
 }
-function optionalIsoDate(value){
-  if(value===null||value===undefined||value==='')return null;
-  const d=new Date(unwrapMongoDate(value));
-  return Number.isFinite(d.getTime())?d.toISOString():null;
-}
-function finiteNumber(value,fallback=0,min=0){
-  const n=Number(value);
-  return Number.isFinite(n)?Math.max(min,n):fallback;
-}
-function normalizeHistory(items){
-  return (Array.isArray(items)?items:[])
-    .filter(item=>typeof item==='string'||(item&&typeof item==='object'&&!Array.isArray(item)))
-    .map(item=>typeof item==='string'
-      ? {date:'',text:item}
-      : ({...item,date:typeof item.date==='object'?safeIsoDate(item.date):String(item.date||''),text:String(item.text||'')}));
-}
 function addDaysIso(dateIso,days){
   const d=new Date(safeIsoDate(dateIso,new Date().toISOString()));
-  d.setUTCDate(d.getUTCDate()+days);
+  d.setDate(d.getDate()+days);
   return d.toISOString();
 }
 function daysLeftText(deleteAt){
@@ -547,21 +511,20 @@ function normalizeArchived(entry){
   const archivedAt=safeIsoDate(entry.archivedAt,new Date().toISOString());
   const deleteAt=safeIsoDate(entry.deleteAt,addDaysIso(archivedAt,90));
   return {
-    ...entry,
     id:entry.id||uid('arc'),
     phone:norm(entry.phone),
-    note:String(entry.note||''),
-    reason:String(entry.reason||'Arhivat manual'),
+    note:entry.note||'',
+    reason:entry.reason||'Arhivat manual',
     archivedAt,
     deleteAt,
-    history:normalizeHistory(entry.history),
-    assignmentsSnapshot:dedupeCurrentAssignments(Array.isArray(entry.assignmentsSnapshot)?entry.assignmentsSnapshot:[]),
-    clientHistory:normalizeHistory(entry.clientHistory),
-    lastReappearedAt:optionalIsoDate(entry.lastReappearedAt)||'',
-    lastReappearedSource:String(entry.lastReappearedSource||''),
-    reappearCount:finiteNumber(entry.reappearCount,0,0),
-    feedbackSummary:String(entry.feedbackSummary||''),
-    noAnswerTotal:finiteNumber(entry.noAnswerTotal,0,0)
+    history:Array.isArray(entry.history)?entry.history:[],
+    assignmentsSnapshot:Array.isArray(entry.assignmentsSnapshot)?entry.assignmentsSnapshot:[],
+    clientHistory:Array.isArray(entry.clientHistory)?entry.clientHistory:[],
+    lastReappearedAt:entry.lastReappearedAt||'',
+    lastReappearedSource:entry.lastReappearedSource||'',
+    reappearCount:Number(entry.reappearCount||0),
+    feedbackSummary:entry.feedbackSummary||'',
+    noAnswerTotal:Number(entry.noAnswerTotal||0)
   };
 }
 function purgeExpiredArchive(){
@@ -776,8 +739,10 @@ function getOrCreateClientForImport(row,agentId,defaultNote,sourceLabel){
   db.clients.push(c);
   return {client:c,created:true,fromArchive:false};
 }
-function archiveClientData(c,reason,historyText='Arhivat manual din Verificare.'){
-  if(!c)return false;
+function archiveClientById(clientId,reason){
+  const c=db.clients.find(x=>x.id===clientId);
+  if(!c)return;
+  if(!confirm(`Arhivezi numărul ${c.phone}? Va fi scos din listele active și păstrat 3 luni în Arhivă.`))return;
   let arc=archivedByPhone(c.phone);
   const entry=normalizeArchived(arc||{phone:c.phone,note:c.note||'',reason:reason||'Arhivat din Verificare'});
   entry.note=c.note||entry.note||'';
@@ -789,7 +754,7 @@ function archiveClientData(c,reason,historyText='Arhivat manual din Verificare.'
   entry.feedbackSummary=(c.assignments||[]).filter(a=>a.feedback).map(a=>`${empName(a.agentId)}: ${a.feedback}`).join(' | ');
   entry.noAnswerTotal=(c.assignments||[]).reduce((s,a)=>s+(Number(a.noAnswerCount)||0),0);
   entry.history=entry.history||[];
-  entry.history.push({date:now(),text:`${historyText} Apariții păstrate în istoric: ${(c.assignments||[]).map(a=>`${empName(a.agentId)} ${stxt(a.status)}${a.transferredAt?' transferat':''}`).join(', ')||'—'}.`});
+  entry.history.push({date:now(),text:`Arhivat. Apariții active: ${(c.assignments||[]).map(a=>`${empName(a.agentId)} ${stxt(a.status)}`).join(', ')||'—'}.`});
   if(arc){
     const idx=(db.archivedClients||[]).findIndex(x=>norm(x.phone)===norm(c.phone));
     if(idx>-1)db.archivedClients[idx]=entry;
@@ -800,12 +765,6 @@ function archiveClientData(c,reason,historyText='Arhivat manual din Verificare.'
   db.clients=db.clients.filter(x=>x.id!==c.id);
   return true;
 }
-function archiveClientById(clientId,reason){
-  const c=db.clients.find(x=>x.id===clientId);
-  if(!c)return false;
-  if(!confirm(`Arhivezi numărul ${c.phone}? Va fi scos din listele active și păstrat 3 luni în Arhivă.`))return false;
-  return archiveClientData(c,reason);
-}
 function archiveClientFromVerification(clientId){
   const ok=archiveClientById(clientId,'Arhivat din Verificare');
   if(ok)save();
@@ -813,20 +772,11 @@ function archiveClientFromVerification(clientId){
 function reactivateArchived(phone){
   const arc=archivedByPhone(phone);
   if(!arc){alert('Nu găsesc numărul în arhivă.');return}
-  const existing=clientByPhone(phone);
-  if(existing){
-    db.archivedClients=(db.archivedClients||[]).filter(x=>norm(x.phone)!==norm(phone));
-    save();
-    alert('Numărul era deja în baza activă. Am eliminat copia duplicată din Arhivă.');
-    return;
-  }
-  const employees=activeEmployees();
-  if(!employees.length){alert('Nu există agenți activi disponibili.');return}
-  const previousActiveAgent=(arc.assignmentsSnapshot||[]).find(a=>employees.some(e=>e.id===a.agentId))?.agentId;
-  const defaultAgent=previousActiveAgent||employees[0].id;
-  const chosen=prompt('Introdu ID-ul agentului la care reactivezi numărul:\n' + employees.map(e=>`${e.id} = ${e.name}`).join('\n'), defaultAgent||'');
+  if(!db.employees.length){alert('Nu există agenți disponibili.');return}
+  const defaultAgent=(arc.assignmentsSnapshot||[]).find(a=>a.agentId)?.agentId || db.employees[0].id;
+  const chosen=prompt('Introdu ID-ul agentului la care reactivezi numărul:\n' + db.employees.map(e=>`${e.id} = ${e.name}`).join('\n'), defaultAgent||'');
   if(!chosen)return;
-  const emp=employees.find(e=>e.id===chosen);
+  const emp=db.employees.find(e=>e.id===chosen);
   if(!emp){alert('Agent invalid.');return}
   const archivedIndex=(db.archivedClients||[]).findIndex(x=>norm(x.phone)===norm(phone));
   const oldAs=(arc.assignmentsSnapshot||[]).filter(a=>a.agentId===chosen)[0];
@@ -843,7 +793,7 @@ function reactivateArchived(phone){
       inSheet:true,
       createdAt:new Date().toISOString(),
       lastVerifiedAt:new Date().toISOString(),
-      noAnswerCount:finiteNumber(oldAs?.noAnswerCount,0,0),
+      noAnswerCount:Number(oldAs?.noAnswerCount||0),
       feedback:oldAs?.feedback||'',
       history:[{date:now(),text:'Reactivat din arhivă.'}]
     }]
@@ -886,130 +836,36 @@ function loadDb(){
     return {version:12,createdAt:new Date().toISOString(),employees:[],deletedEmployeeNames:{},clients:[],deletedRecords:[],transfers:[],backups:[],archivedClients:[]};
   }
 }
-function normalizeAssignment(raw){
-  const a=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
-  const status=mapOldStatus(a.status);
-  const createdAt=safeIsoDate(a.createdAt,new Date().toISOString());
-  const transferredAt=a.transferredAt?(optionalIsoDate(a.transferredAt)||createdAt):null;
-  const explicitInSheet=typeof a.inSheet==='boolean'?a.inSheet:(status==='active'&&!transferredAt);
-  return {
-    ...a,
-    id:String(a.id||uid('as')),
-    agentId:String(a.agentId||''),
-    status,
-    inSheet:status==='active'&&!transferredAt?explicitInSheet:false,
-    createdAt,
-    lastVerifiedAt:optionalIsoDate(a.lastVerifiedAt),
-    transferredAt,
-    transferredToAgentId:a.transferredToAgentId?String(a.transferredToAgentId):'',
-    noAnswerCount:Math.floor(finiteNumber(a.noAnswerCount,0,0)),
-    feedback:String(a.feedback||''),
-    feedbackUpdatedAt:optionalIsoDate(a.feedbackUpdatedAt),
-    history:normalizeHistory(a.history)
-  };
-}
-function assignmentTimestamp(a){
-  return new Date(a?.lastVerifiedAt||a?.createdAt||0).getTime()||0;
-}
-function dedupeCurrentAssignments(items){
-  const result=[];
-  const currentByAgent=new Map();
-  (Array.isArray(items)?items:[]).map(normalizeAssignment).filter(a=>a.agentId).forEach(a=>{
-    if(a.transferredAt){result.push(a);return}
-    const previousIndex=currentByAgent.get(a.agentId);
-    if(previousIndex===undefined){
-      currentByAgent.set(a.agentId,result.length);
-      result.push(a);
-      return;
-    }
-    const previous=result[previousIndex];
-    const useIncoming=assignmentTimestamp(a)>=assignmentTimestamp(previous);
-    const chosen=useIncoming?a:previous;
-    const other=useIncoming?previous:a;
-    chosen.history=mergeHistory(other.history,chosen.history);
-    chosen.noAnswerCount=Math.max(finiteNumber(chosen.noAnswerCount),finiteNumber(other.noAnswerCount));
-    if(!chosen.feedback&&other.feedback)chosen.feedback=other.feedback;
-    result[previousIndex]=chosen;
-  });
-  return result;
-}
-function normalizeClientRecord(raw){
-  const c=raw&&typeof raw==='object'&&!Array.isArray(raw)?raw:{};
-  let assignments;
-  if(Array.isArray(c.assignments)){
-    assignments=c.assignments;
-  }else{
-    const agentId=c.currentAgentId||c.currentFriendId||c.originalAgentId||c.originalFriendId||'';
-    assignments=agentId?[{
-      id:uid('as'),agentId,status:mapOldStatus(c.status),createdAt:c.createdAt||new Date().toISOString(),
-      lastVerifiedAt:c.lastVerifiedAt||c.returnedAt||null,noAnswerCount:c.noAnswerCount||0,
-      feedback:c.verificationFeedback||'',inSheet:(mapOldStatus(c.status)==='active'&&!c.transferredAt),
-      transferredAt:c.transferredAt||null,transferredToAgentId:c.transferredToAgentId||'',history:[]
-    }]:[];
-  }
-  return {
-    ...c,
-    id:String(c.id||uid('cli')),
-    phone:norm(c.phone),
-    note:String(c.note||''),
-    createdAt:safeIsoDate(c.createdAt,new Date().toISOString()),
-    history:normalizeHistory(c.history),
-    auditIssueAcks:(Array.isArray(c.auditIssueAcks)?c.auditIssueAcks:[])
-      .filter(x=>x&&typeof x==='object'&&!Array.isArray(x)&&x.key)
-      .map(x=>({...x,key:String(x.key),type:String(x.type||''),agentId:String(x.agentId||''),phone:norm(x.phone||c.phone)}))
-      .slice(-80),
-    assignments:dedupeCurrentAssignments(assignments)
-  };
-}
 function normalizeDb(data){
-  data=data&&typeof data==='object'&&!Array.isArray(data)?{...data}:{};
-  data.version=Math.max(1,Math.floor(finiteNumber(data.version,12,1)));
-  data.createdAt=safeIsoDate(data.createdAt,new Date().toISOString());
-
-  const employeeMap=new Map();
-  (Array.isArray(data.employees)?data.employees:Array.isArray(data.friends)?data.friends:[])
-    .filter(e=>e&&typeof e==='object'&&!Array.isArray(e))
-    .forEach((e,index)=>{
-      const id=String(e.id||uid('emp'));
-      const normalized={...e,id,name:String(e.name||`Agent ${index+1}`).trim()||`Agent ${index+1}`,deleted:!!e.deleted};
-      const old=employeeMap.get(id);
-      if(!old)employeeMap.set(id,normalized);
-      else if(old.deleted&&!normalized.deleted)employeeMap.set(id,{...old,...normalized,deleted:false});
-    });
-  data.employees=[...employeeMap.values()];
-
-  const rawDeletedNames=data.deletedEmployeeNames&&typeof data.deletedEmployeeNames==='object'&&!Array.isArray(data.deletedEmployeeNames)?data.deletedEmployeeNames:{};
-  data.deletedEmployeeNames=Object.fromEntries(Object.entries(rawDeletedNames).map(([id,name])=>[String(id),String(name||'Agent șters')]));
+  data=data&&typeof data==='object'&&!Array.isArray(data)?data:{};
+  data.employees=(Array.isArray(data.employees)?data.employees:Array.isArray(data.friends)?data.friends:[]).filter(e=>e&&typeof e==='object');
+  data.clients=(Array.isArray(data.clients)?data.clients:[]).filter(c=>c&&typeof c==='object');
+  data.deletedEmployeeNames=data.deletedEmployeeNames&&typeof data.deletedEmployeeNames==='object'&&!Array.isArray(data.deletedEmployeeNames)?data.deletedEmployeeNames:{};
   data.deletedRecords=[];
-  data.transfers=trimTransferHistory(data.transfers).map(t=>({
-    ...t,
-    id:String(t.id||uid('tr')),
-    toAgentId:String(t.toAgentId||''),
-    createdAt:safeIsoDate(t.createdAt,'1970-01-01T00:00:00.000Z'),
-    createdAtRo:String(t.createdAtRo||''),
-    count:Math.floor(finiteNumber(t.count,Array.isArray(t.items)?t.items.length:0,0)),
-    items:(Array.isArray(t.items)?t.items:[]).filter(i=>i&&typeof i==='object'&&!Array.isArray(i)).map(i=>({...i,phone:norm(i.phone),note:String(i.note||'')})).filter(i=>i.phone)
-  }));
-  data.backups=(Array.isArray(data.backups)?data.backups:[])
-    .filter(b=>b&&typeof b==='object'&&!Array.isArray(b)&&b.data&&typeof b.data==='object')
-    .map(b=>({...b,id:String(b.id||uid('bak')),createdAt:safeIsoDate(b.createdAt,new Date().toISOString()),createdAtRo:String(b.createdAtRo||''),reason:String(b.reason||'Backup automat')}))
-    .slice(-3);
-
-  const clientMap=new Map();
-  (Array.isArray(data.clients)?data.clients:[]).map(normalizeClientRecord).filter(c=>isValidPhoneDigits(c.phone)).forEach(c=>{
-    const old=clientMap.get(c.phone);
-    if(!old){clientMap.set(c.phone,c);return}
-    old.history=mergeHistory(old.history,c.history,[{date:now(),text:'Au fost unite automat două înregistrări duplicate pentru același telefon.'}]);
-    old.assignments=dedupeCurrentAssignments([...(old.assignments||[]),...(c.assignments||[])]);
-    old.auditIssueAcks=[...(old.auditIssueAcks||[]),...(c.auditIssueAcks||[])].filter((x,i,arr)=>arr.findIndex(y=>y.key===x.key)===i).slice(-80);
-    if(!old.note&&c.note)old.note=c.note;
-    if(new Date(c.createdAt)<new Date(old.createdAt))old.createdAt=c.createdAt;
+  data.transfers=trimTransferHistory(data.transfers);
+  data.backups=(Array.isArray(data.backups)?data.backups:[]).filter(b=>b&&typeof b==='object').slice(-3);
+  data.archivedClients=(Array.isArray(data.archivedClients)?data.archivedClients:[]).map(normalizeArchived).filter(Boolean);
+  data.clients=data.clients.map(c=>{
+    if(Array.isArray(c.assignments)){
+      c.assignments=c.assignments.filter(a=>a&&typeof a==='object').map(a=>({noAnswerCount:0,feedback:'',history:[],inSheet:(a.status==='active' && !a.transferredAt),...a}));
+      c.history=Array.isArray(c.history)?c.history:[];
+      return c;
+    }
+    const agentId=c.currentAgentId||c.currentFriendId||c.originalAgentId||c.originalFriendId||'';
+    return {
+      id:c.id||uid('cli'),phone:norm(c.phone),note:c.note||'',createdAt:c.createdAt||new Date().toISOString(),
+      history:c.history||[],
+      assignments:agentId?[{
+        id:uid('as'),agentId,status:mapOldStatus(c.status),createdAt:c.createdAt||new Date().toISOString(),
+        lastVerifiedAt:c.lastVerifiedAt||c.returnedAt||null,noAnswerCount:c.noAnswerCount||0,feedback:c.verificationFeedback||'',inSheet:(mapOldStatus(c.status)==='active' && !c.transferredAt),history:[]
+      }]:[]
+    };
   });
-  data.clients=[...clientMap.values()];
-
-  const activePhones=new Set(data.clients.map(c=>c.phone));
-  data.archivedClients=mergeArchivedLists(Array.isArray(data.archivedClients)?data.archivedClients:[])
-    .filter(a=>!activePhones.has(norm(a.phone)));
+  const nowTs=Date.now();
+  data.archivedClients=data.archivedClients.filter(a=>{
+    const t=new Date(a.deleteAt).getTime();
+    return Number.isFinite(t)&&t>nowTs;
+  });
   return data;
 }
 function mapOldStatus(s){if(s==='new'||s==='returned')return'active';return ['active','brown','red','missing','safe'].includes(s)?s:'active'}
@@ -1024,9 +880,6 @@ let lastButtonIndicator = null;
 let saveIndicatorTimer = null;
 let currentSaveContext = '';
 let currentPersistPromise = null;
-let hasUnsavedChanges = false;
-let reloadForConflict = false;
-const SAVE_TIMEOUT_MS = 30000;
 
 function setSaveContext(ctx){currentSaveContext=ctx||''}
 function clearInlineSaveContext(){
@@ -1072,7 +925,6 @@ function setSaveVisual(state){
 }
 
 function save(opts={}){
-  hasUnsavedChanges=true;
   purgeExpiredArchive();
   render();
   renderVerification();
@@ -1086,8 +938,9 @@ function save(opts={}){
 }
 
 function persistOnly(opts={}){
-  hasUnsavedChanges=true;
   purgeExpiredArchive();
+  renderArchive();
+  previewDb();
   schedulePersist(opts);
 }
 
@@ -1096,9 +949,6 @@ function schedulePersist(opts={}){
   if(booting)return;
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>persistDb(),650);
-}
-function flushPendingSave(){
-  if(saveTimer&&!isSaving)persistDb();
 }
 
 async function persistDb(opts={}){
@@ -1115,93 +965,49 @@ async function persistDb(opts={}){
 
   const allowArchiveShrink=pendingArchiveShrink===true;
   pendingArchiveShrink=false;
-  clearTimeout(saveTimer);
-  saveTimer=null;
   isSaving=true;
   dirtyWhileSaving=false;
   setSaveVisual('saving');
 
   currentPersistPromise=(async()=>{
-    let requestSucceeded=false;
-    const controller=new AbortController();
-    const timeoutId=setTimeout(()=>controller.abort(),SAVE_TIMEOUT_MS);
     try{
       const res=await fetch('/api/state',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({db,rev:stateRev,archiveGuard:{allowArchiveShrink}}),
-        signal:controller.signal
+        body:JSON.stringify({db,rev:stateRev,archiveGuard:{allowArchiveShrink}})
       });
 
       if(res.status===409){
-        reloadForConflict=true;
-        dirtyWhileSaving=false;
         alert('Baza a fost modificată de altcineva. Pagina se reîncarcă pentru siguranță.');
         location.reload();
         return false;
       }
 
-      if(res.status===401){
-        reloadForConflict=true;
-        alert('Sesiunea a expirat. Intră din nou cu parola; pagina va merge la login.');
-        location.href='/login?next=/';
-        return false;
-      }
-
-      if(!res.ok){
-        const raw=await res.text();
-        let parsed=null;
-        try{parsed=JSON.parse(raw)}catch(_e){}
-        const error=new Error(parsed?.message||raw||`HTTP ${res.status}`);
-        error.userMessage=res.status===413
-          ? 'Baza este prea mare pentru un singur document MongoDB. Descarcă un backup și redu istoricul înainte de alte modificări.'
-          : 'Nu am putut salva în MongoDB. Verifică internetul sau serverul.';
-        throw error;
-      }
+      if(!res.ok)throw new Error(await res.text());
 
       const data=await res.json();
       stateRev=data.rev;
-      requestSucceeded=true;
-      hasUnsavedChanges=dirtyWhileSaving;
       clearInlineSaveContext();
       setSaveVisual('done');
       return true;
     }catch(e){
       console.error(e);
-      if(allowArchiveShrink)pendingArchiveShrink=true;
-      hasUnsavedChanges=true;
       const pending=el('auditSavePending')||el('addSavePending');
       if(pending)pending.innerHTML='<span class="save-error-dot">!</span> Eroare la salvare. Verifică internetul sau serverul Render.';
       setSaveVisual('error');
-      const message=e?.name==='AbortError'
-        ? 'Salvarea a durat prea mult și a fost oprită. Datele au rămas în pagină; verifică serverul și încearcă din nou.'
-        : (e?.userMessage||'Nu am putut salva în MongoDB. Verifică internetul sau serverul.');
-      alert(message);
+      alert('Nu am putut salva în MongoDB. Verifică internetul sau serverul Render.');
       return false;
     }finally{
-      clearTimeout(timeoutId);
       isSaving=false;
       const shouldRunAgain=dirtyWhileSaving;
       dirtyWhileSaving=false;
       currentPersistPromise=null;
-      if(shouldRunAgain&&!reloadForConflict){
-        // Dacă au apărut editări cât cererea era în zbor, salvăm încă o dată
-        // starea completă. Funcționează și ca o singură reîncercare după eroare.
-        await persistDb();
-      }else if(!requestSucceeded&&shouldRunAgain){
-        hasUnsavedChanges=true;
-      }
+      if(shouldRunAgain)await persistDb();
     }
   })();
 
   return currentPersistPromise;
 }
-
-window.addEventListener('beforeunload',event=>{
-  if(!hasUnsavedChanges||reloadForConflict)return;
-  event.preventDefault();
-  event.returnValue='';
-});
 function activeEmployees(){return db.employees.filter(e=>!e.deleted)}
 function norm(v){
   return String(v||'').replace(/\D/g,'');
@@ -1242,7 +1048,7 @@ function phoneInText(text){
 function clean(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase()}
 function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;")}
 function empName(idv){const e=db.employees.find(x=>x.id===idv);if(e)return e.name+(e.deleted?' (șters)':'');return db.deletedEmployeeNames?.[idv]?db.deletedEmployeeNames[idv]+' (șters definitiv)':'Agent necunoscut'}
-function stxt(s){return s==='brown'?'MARO':s==='red'?'ROȘU':s==='missing'?'DISPĂRUT':s==='safe'?'SAFE':'ACTIV'}
+function stxt(s){return s==='brown'?'MARO':s==='red'?'ROSU':s==='missing'?'DISPARUT':s==='safe'?'SAFE':'ACTIV'}
 function label(s){if(s==='brown')return'<span class="pill brown">MARO</span>';if(s==='red')return'<span class="pill red">ROȘU</span>';if(s==='missing')return'<span class="pill black">DISPĂRUT</span>';if(s==='safe')return'<span class="pill safe">SAFE</span>';return'<span class="pill green">ACTIV</span>'}
 function clientByPhone(phone){return db.clients.find(c=>norm(c.phone)===norm(phone))}
 function activeAssignments(c){return (c?.assignments||[]).filter(a=>!a.transferredAt)}
@@ -1276,23 +1082,6 @@ function eligibleBrownAssignmentsForBulkDelete(){
     if(brownAssignments.length)rows.push({client:c,assignments:brownAssignments});
   });
   return rows;
-}
-function bulkArchiveCandidates(kind){
-  return db.clients.filter(c=>{
-    const current=activeAssignments(c);
-    if(!current.length)return false;
-    if(kind==='brown')return current.every(a=>a.status==='brown');
-    if(kind==='red')return current.some(a=>a.status==='red')&&current.every(a=>a.status==='red'||a.status==='missing');
-    return false;
-  });
-}
-function bulkArchiveProtectedCount(kind){
-  const candidateIds=new Set(bulkArchiveCandidates(kind).map(c=>c.id));
-  return db.clients.filter(c=>{
-    const current=activeAssignments(c);
-    const hasTarget=current.some(a=>a.status===kind);
-    return hasTarget&&!candidateIds.has(c.id);
-  }).length;
 }
 function clientHasActiveElsewhere(c, sourceAgentId){
   return activeAssignments(c).some(a=>a.agentId!==sourceAgentId && a.status==='active');
@@ -1860,9 +1649,7 @@ function auditRisk(a, rows){
   const pasted=rows?.length||0;
   const missingRate=expected?missing/expected:0;
   const pastedRate=expected?pasted/expected:1;
-  // Protecție și pentru listele mici: orice procent mare de dispăruți poate
-  // însemna că s-a lipit doar o bucată din Sheet, nu lista completă.
-  const risky=expected>0 && missing>0 && (missing>=5 || missingRate>=0.20 || pastedRate<0.80);
+  const risky=expected>=20 && (missing>=5 || missingRate>=0.20 || pastedRate<0.80);
   return{expected,missing,pasted,missingRate,pastedRate,risky};
 }
 
@@ -1938,7 +1725,6 @@ async function applyFullAudit(){
   if(!a.detected||a.ambiguous)return alert('Alege agentul sursă manual sau lipește o listă clară.');
   const risk=auditRisk(a,rows);
   if(risk.risky && !confirm(`ATENȚIE: lista pare incompletă. Ai lipit ${risk.pasted} rânduri, dar erau ${risk.expected} numere așteptate în Sheet. ${risk.missing} vor deveni DISPĂRUT. Continui?`))return;
-  if(!risk.risky && a.missing.length>0 && !confirm(`${a.missing.length} numere care erau în Sheet vor deveni DISPĂRUT. Confirmi că ai lipit lista completă a agentului?`))return;
   const issueCounts=auditIssuesSummary(rows,a);
   const issueTotal=Object.values(issueCounts).reduce((s,x)=>s+x,0);
   if(issueTotal>0 && !confirm(`Există ${issueTotal} atenționări în audit: reapărute din arhivă, istoric la agent, active la alt agent sau conflicte. Continui aplicarea?`))return;
@@ -2158,7 +1944,6 @@ function archiveClientFromModal(){
 }
 
 /* Verificare */
-let bulkArchiveRunning=false;
 function renderVerification(){
   selectOptions(['verifyEmpFilter'],true);
   const sf=el('verifyStatusFilter')?.value||'all';
@@ -2170,32 +1955,53 @@ function renderVerification(){
     const activeAs=activeAssignments(c);
     const conflict=clientHasConflict(c);
     const exhaustedAssignments=activeAs.filter(a=>isBrownExhausted(c,a));
-    const redAssignments=activeAs.filter(a=>a.status==='red');
-    const missingAssignments=activeAs.filter(a=>a.status==='missing');
+    const redMissingAssignments=activeAs.filter(a=>['red','missing'].includes(a.status));
 
     // În Verificare nu mai intră MARO simplu.
     // Intră doar: ROȘU, DISPĂRUT, CONFLICT, MARO epuizat.
-    const isRelevant=conflict||exhaustedAssignments.length||redAssignments.length||missingAssignments.length;
+    const isRelevant = conflict || exhaustedAssignments.length || redMissingAssignments.length;
     if(!isRelevant)return;
 
-    let relevant=conflict?activeAs:[...redAssignments,...missingAssignments,...exhaustedAssignments];
+    let relevant=[];
+    if(conflict){
+      // la conflict arătăm toate aparițiile active, ca să se vadă contextul complet
+      relevant=activeAs;
+    }else{
+      const seen=new Set();
+      [...redMissingAssignments,...exhaustedAssignments].forEach(a=>{
+        if(!seen.has(a.id)){
+          seen.add(a.id);
+          relevant.push(a);
+        }
+      });
+    }
+
     if(sf==='conflict'){
       if(!conflict)return;
       relevant=activeAs;
     }else if(sf==='red'){
-      relevant=redAssignments;
-      if(!relevant.length)return;
+      if(!redMissingAssignments.some(a=>a.status==='red'))return;
+      relevant=conflict ? activeAs : relevant.filter(a=>a.status==='red' || isBrownExhausted(c,a));
+      if(!conflict) relevant = relevant.filter(a=>a.status==='red');
     }else if(sf==='missing'){
-      relevant=missingAssignments;
-      if(!relevant.length)return;
+      if(!redMissingAssignments.some(a=>a.status==='missing'))return;
+      relevant=conflict ? activeAs : relevant.filter(a=>a.status==='missing');
     }else if(sf==='exhausted'){
-      relevant=exhaustedAssignments;
-      if(!relevant.length)return;
+      if(!exhaustedAssignments.length)return;
+      relevant=conflict ? activeAs.filter(a=>isBrownExhausted(c,a) || ['red','missing'].includes(a.status)) : exhaustedAssignments;
+      if(!relevant.length) relevant=exhaustedAssignments;
     }
 
     if(ef!=='all'){
-      relevant=relevant.filter(a=>a.agentId===ef);
-      if(!relevant.length)return;
+      const hasAgentMatch = activeAs.some(a=>a.agentId===ef);
+      if(!hasAgentMatch)return;
+      if(conflict){
+        // la conflict păstrăm contextul complet, dar doar dacă agentul este implicat
+        relevant = activeAs;
+      }else{
+        relevant = relevant.filter(a=>a.agentId===ef);
+        if(!relevant.length)return;
+      }
     }
 
     if(q && !clean([
@@ -2218,24 +2024,17 @@ function renderVerification(){
 
   const conflicts=db.clients.filter(clientHasConflict).length;
   const exhaustedCount=db.clients.filter(c=>activeAssignments(c).some(a=>isBrownExhausted(c,a))).length;
-  const archiveBrown=bulkArchiveCandidates('brown');
-  const archiveRed=bulkArchiveCandidates('red');
-  const protectedBrown=bulkArchiveProtectedCount('brown');
-  const protectedRed=bulkArchiveProtectedCount('red');
   const bulkBrown=eligibleBrownAssignmentsForBulkDelete();
   const bulkBrownAssignments=bulkBrown.reduce((sum,row)=>sum+row.assignments.length,0);
-  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b><br>
-    Arhivare rapidă: <b>${archiveBrown.length}</b> MARO și <b>${archiveRed.length}</b> ROȘII | Protejate fiind amestecate cu alte statusuri: <b>${protectedBrown}</b> MARO / <b>${protectedRed}</b> ROȘII`;
-  const archiveBrownBtn=el('bulkArchiveBrownBtn');
-  if(archiveBrownBtn){archiveBrownBtn.disabled=bulkArchiveRunning||archiveBrown.length===0;archiveBrownBtn.textContent=`Arhivează toate MARO (${archiveBrown.length})`}
-  const archiveRedBtn=el('bulkArchiveRedBtn');
-  if(archiveRedBtn){archiveRedBtn.disabled=bulkArchiveRunning||archiveRed.length===0;archiveRedBtn.textContent=`Arhivează toate ROȘII (${archiveRed.length})`}
+  el('verifyInfo').innerHTML=`Afișate: <b>${rows.length}</b> numere unice | Conflicte telefoane: <b>${conflicts}</b> | MARO epuizate: <b>${exhaustedCount}</b><br>MARO eligibile pentru ștergere în masă: <b>${bulkBrown.length}</b> telefoane / <b>${bulkBrownAssignments}</b> apariții`;
   const bulkBtn=el('bulkDeleteBrownBtn');
-  if(bulkBtn){bulkBtn.disabled=bulkArchiveRunning||bulkBrownAssignments===0;bulkBtn.textContent=`Șterge aparițiile MARO eligibile (${bulkBrownAssignments})`}
+  if(bulkBtn)bulkBtn.disabled=bulkBrownAssignments===0;
 
   el('verifyRows').innerHTML=rows.length?rows.map(r=>{
     const c=r.client;
     const relevant=r.relevant&&r.relevant.length?r.relevant:activeAssignments(c);
+    const primary=relevant[0];
+
     const statusBadges=relevant.map(a=>`
       <div class="verify-agent-block">
         <b>${esc(empName(a.agentId))}</b><br>
@@ -2244,22 +2043,15 @@ function renderVerification(){
       </div>
     `).join('');
 
-    const editableAssignments=relevant.filter(a=>a.status!=='safe');
-    const noAnswerControls=editableAssignments.length?editableAssignments.map(a=>`
-      <div class="verify-agent-block">
-        <div class="muted">${esc(empName(a.agentId))}</div>
-        <div class="verify-counter">
-          <button class="small secondary" onclick="changeNoAnswer('${c.id}','${a.id}',-1)">-</button>
-          <strong>${Math.floor(finiteNumber(a.noAnswerCount,0,0))}</strong>
-          <button class="small orange" onclick="changeNoAnswer('${c.id}','${a.id}',1)">+</button>
-        </div>
-      </div>`).join(''):'—';
+    const noAnswerControls=primary?`
+      <div class="verify-counter">
+        <button class="small secondary" onclick="changeNoAnswer('${c.id}','${primary.id}',-1)">-</button>
+        <strong>${primary.noAnswerCount||0}</strong>
+        <button class="small orange" onclick="changeNoAnswer('${c.id}','${primary.id}',1)">+</button>
+      </div>`:'—';
 
-    const feedbackControls=editableAssignments.length?editableAssignments.map(a=>`
-      <div class="verify-agent-block">
-        <div class="muted">${esc(empName(a.agentId))}</div>
-        <textarea class="feedback-mini" placeholder="Feedback..." oninput="autoSaveFeedback('${c.id}','${a.id}',this.value)" onblur="flushPendingSave()">${esc(a.feedback||'')}</textarea>
-      </div>`).join(''):'—';
+    const feedbackControls=primary?`
+      <textarea class="feedback-mini" placeholder="Feedback..." oninput="autoSaveFeedback('${c.id}','${primary.id}',this.value)">${esc(primary.feedback||'')}</textarea>`:'—';
 
     return `<tr>
       <td>
@@ -2279,29 +2071,6 @@ function renderVerification(){
       </td>
     </tr>`;
   }).join(''):'<tr><td colspan="6" class="muted">Nu ai nimic de verificat.</td></tr>';
-}
-async function bulkArchiveStatus(kind){
-  if(bulkArchiveRunning)return;
-  const candidates=bulkArchiveCandidates(kind);
-  if(!candidates.length)return alert(kind==='brown'?'Nu există telefoane MARO sigure pentru arhivare în masă.':'Nu există telefoane ROȘII sigure pentru arhivare în masă.');
-  const protectedCount=bulkArchiveProtectedCount(kind);
-  const labelText=kind==='brown'?'MARO':'ROȘII';
-  const ruleText=kind==='brown'
-    ? 'Sunt incluse doar telefoanele ale căror apariții curente sunt toate MARO.'
-    : 'Sunt incluse telefoanele cu ROȘU care mai pot avea doar apariții DISPĂRUT.';
-  const ok=confirm(`Arhivezi instant ${candidates.length} telefoane ${labelText}? ${ruleText} ${protectedCount} telefoane amestecate cu alte statusuri vor fi protejate și nu vor fi atinse. Se creează automat un backup înainte.`);
-  if(!ok)return;
-
-  bulkArchiveRunning=true;
-  createAutoBackup(`Înainte de arhivarea în masă a ${candidates.length} telefoane ${labelText}`);
-  const reason=kind==='brown'?'Arhivare în masă MARO din Verificare':'Arhivare în masă ROȘU din Verificare';
-  const historyText=kind==='brown'?'Arhivat în masă ca MARO; nu mai intră la transfer.':'Arhivat în masă ca ROȘU; nu mai intră la verificare.';
-  let archived=0;
-  candidates.forEach(c=>{if(archiveClientData(c,reason,historyText))archived++});
-  const saved=await save();
-  bulkArchiveRunning=false;
-  renderVerification();
-  if(saved)alert(`Arhivare finalizată: ${archived} telefoane ${labelText} au fost mutate în Arhivă pentru 90 de zile. ${protectedCount?protectedCount+' au rămas protejate.':''}`);
 }
 async function bulkDeleteEligibleBrown(){
   const eligible=eligibleBrownAssignmentsForBulkDelete();
@@ -2327,8 +2096,8 @@ async function bulkDeleteEligibleBrown(){
   if(saved)alert(`Ștergere finalizată: ${assignmentCount} apariții MARO eliminate de la ${phoneCount} telefoane.`);
 }
 function findAs(clientId,asId){const c=db.clients.find(x=>x.id===clientId);return[c,c?.assignments?.find(a=>a.id===asId)]}
-function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!c||!a)return;a.noAnswerCount=Math.max(0,Math.floor(finiteNumber(a.noAnswerCount,0,0)+finiteNumber(delta,0,-100000)));a.history=Array.isArray(a.history)?a.history:[];a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}
-function autoSaveFeedback(clientId,asId,value){const [c,a]=findAs(clientId,asId);if(!c||!a)return;a.feedback=String(value||'');a.feedbackUpdatedAt=new Date().toISOString();persistOnly()}
+function changeNoAnswer(clientId,asId,delta){const [c,a]=findAs(clientId,asId);if(!a)return;a.noAnswerCount=Math.max(0,(a.noAnswerCount||0)+delta);a.history.push({date:now(),text:`Nu răspunde = ${a.noAnswerCount}`});save()}
+function autoSaveFeedback(clientId,asId,value){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=String(value||'');a.feedbackUpdatedAt=new Date().toISOString();persistOnly()}
 function saveFeedback(clientId,asId){const [c,a]=findAs(clientId,asId);if(!a)return;a.feedback=(el('fb_'+asId)?.value||'').trim();persistOnly()}
 function deleteAssignment(clientId,asId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;const a=c.assignments.find(x=>x.id===asId);if(!a)return;if(!confirm(`Ștergi apariția numărului ${c.phone} la ${empName(a.agentId)}?`))return;c.assignments=c.assignments.filter(x=>x.id!==asId);c.history.push({date:now(),text:`Apariția la ${empName(a.agentId)} a fost ștearsă definitiv.`});if(!c.assignments.length)db.clients=db.clients.filter(x=>x.id!==clientId);save()}
 function deleteClientForever(clientId){const c=db.clients.find(x=>x.id===clientId);if(!c)return;if(!confirm(`Ștergi peste tot numărul ${c.phone} din baza activă?`))return;db.clients=db.clients.filter(x=>x.id!==clientId);save()}
@@ -2375,7 +2144,7 @@ function renderTransfer(){
   rows.forEach(r=>r.sources.forEach(a=>{by[a.agentId]=(by[a.agentId]||0)+1}));
 
   el('trInfo').innerHTML=`Către <b>${esc(empName(to))}</b> | Numere eligibile unice: <b>${rows.length}</b><br>
-    Total numere cu MARO: <b>${totalBrownClients.size}</b> | Blocate pentru că au și ACTIV/ROȘU/DISPĂRUT/SAFE: <b>${blockedStatus.size}</b> | Blocate pentru destinație/istoric: <b>${blockedDestination.size}</b><br>
+    Total numere cu MARO: <b>${totalBrownClients.size}</b> | Blocate pentru că au și ACTIV/ROȘU/DISPĂRUT: <b>${blockedStatus.size}</b> | Blocate pentru destinație/istoric: <b>${blockedDestination.size}</b><br>
     Regula: se transferă doar dacă toate aparițiile active ale numărului sunt MARO.<br>
     Surse MARO: ${Object.entries(by).map(([id,c])=>empName(id)+': '+c).join(' | ')||'—'}`;
 
@@ -2385,14 +2154,13 @@ function renderTransfer(){
       <td><div class="phone s-brown">${esc(r.client.phone)}</div></td>
       <td>${esc(r.client.note||'')}</td>
       <td>${r.client.assignments.map(a=>`<span class="pill gray">${esc(empName(a.agentId))}</span>`).join('')}</td>
-    </tr>`).join(''):'<tr><td colspan="4" class="muted">Nu există MARO eligibile. Dacă un număr are ACTIV, ROȘU, DISPĂRUT sau SAFE la orice agent, nu poate fi transferat.</td></tr>';
+    </tr>`).join(''):'<tr><td colspan="4" class="muted">Nu există MARO eligibile. Dacă un număr are ACTIV, ROȘU sau DISPĂRUT la orice agent, nu poate fi transferat.</td></tr>';
 }
 function toggleAll(v){document.querySelectorAll('.trChk').forEach(x=>x.checked=v)}
 function selectFirstTransfer(n){[...document.querySelectorAll('.trChk')].forEach((x,i)=>x.checked=i<n)}
-function selectFirstTransferFromInput(){const n=parseInt(el('transferCount')?.value||'0',10);if(!Number.isInteger(n)||n<1)return alert('Scrie un număr întreg mai mare decât 0.');selectFirstTransfer(n)}
-async function transferBrown(){
+function selectFirstTransferFromInput(){const n=parseInt(el('transferCount')?.value||'0',10);if(!n)return alert('Scrie un număr valid.');selectFirstTransfer(n)}
+function transferBrown(){
   const to=el('trTo')?.value||'';if(!to)return alert('Alege agentul destinație.');
-  if(!activeEmployees().some(e=>e.id===to))return alert('Agentul destinație nu mai este activ. Reîncarcă lista de agenți.');
   const vals=[...document.querySelectorAll('.trChk:checked')].map(x=>x.value);
   if(!vals.length)return alert('Selectează clienți.');
 
@@ -2474,8 +2242,7 @@ async function transferBrown(){
     transferHistoryPage=1;
   }
 
-  const saved=await save();
-  if(!saved)return;
+  save();
 
   const sources=Object.entries(sourceCounter).map(([id,c])=>empName(id)+': '+c).join(' | ');
   if(moved.length){
@@ -2564,9 +2331,8 @@ function mergeArchivedLists(...lists){
     base.history=mergeHistory(other.history,base.history);
     base.clientHistory=mergeHistory(other.clientHistory,base.clientHistory);
     base.assignmentsSnapshot=(base.assignmentsSnapshot&&base.assignmentsSnapshot.length)?base.assignmentsSnapshot:(other.assignmentsSnapshot||[]);
-    ['note','reason','lastReappearedAt','lastReappearedSource','feedbackSummary'].forEach(field=>{if(!base[field]&&other[field])base[field]=other[field]});
-    base.reappearCount=Math.max(finiteNumber(base.reappearCount),finiteNumber(other.reappearCount));
-    base.noAnswerTotal=Math.max(finiteNumber(base.noAnswerTotal),finiteNumber(other.noAnswerTotal));
+    if(!base.note&&other.note)base.note=other.note;
+    if(!base.reason&&other.reason)base.reason=other.reason;
     map.set(key,base);
   });
   return [...map.values()].filter(a=>{
@@ -2610,7 +2376,7 @@ function createAutoBackup(reason){
   if(db.backups.length>3)db.backups=db.backups.slice(-3);
 }
 function restoreLastBackup(){const b=db.backups?.[db.backups.length-1];if(!b)return alert('Nu există backup.');restoreBackup(b.id)}
-async function restoreBackup(id){
+function restoreBackup(id){
   const b=(db.backups||[]).find(x=>x.id===id);
   if(!b)return alert('Backup inexistent.');
   if(!confirm(`Revii la backup-ul din ${b.createdAtRo}? Arhiva NU va fi ștearsă; se păstrează/îmbină cu arhiva curentă.`))return;
@@ -2618,8 +2384,7 @@ async function restoreBackup(id){
   db=restoreDataKeepingArchive(b.data);
   db.deletedRecords=[];
   db.backups=keep;
-  const saved=await save();
-  if(saved)alert('Backup restaurat și salvat. Numerele active restaurate au fost scoase automat din Arhivă ca să nu existe duplicate.');
+  save();
 }
 
 function renderArchive(){
@@ -2665,33 +2430,28 @@ function renderBackupInfo(){
     </div>`).join('')}</div>`;
 }
 function exportDb(){db.archivedClients=mergeArchivedLists(db.archivedClients||[]);download(db,'backup_verificare_clienti_render.json')}
-function copyDb(){db.archivedClients=mergeArchivedLists(db.archivedClients||[]);copyTextToClipboard(JSON.stringify(db,null,2),'Backup-ul JSON a fost copiat.')}
+function copyDb(){navigator.clipboard.writeText(JSON.stringify(db,null,2)).then(()=>alert('JSON copiat.')).catch(()=>alert('Nu pot copia automat.'))}
 function importDbFile(ev){
   const f=ev.target.files[0];
   if(!f)return;
-  ev.target.value='';
-  if(!confirm('Înlocuiești baza din import? Se creează întâi un backup automat, iar arhiva curentă se păstrează/îmbină.'))return;
+  if(!confirm('Înlocuiești baza din import? Arhiva curentă se păstrează/îmbină, nu se șterge automat.'))return;
   const r=new FileReader();
-  r.onload=async()=>{
+  r.onload=()=>{
     try{
       let imported=JSON.parse(r.result);
       if(imported.db)imported=imported.db;
       if(imported.data&&imported.data.clients)imported=imported.data;
-      if(!imported||typeof imported!=='object'||Array.isArray(imported)||!Array.isArray(imported.clients))throw new Error('Structură de backup invalidă');
       delete imported._id;
       delete imported._rev;
-      createAutoBackup(`Înainte de importul ${f.name||'backup JSON'}`);
-      const keepBackups=clone(db.backups||[]);
       db=restoreDataKeepingArchive(imported);
-      db.backups=keepBackups;
-      const saved=await save();
-      if(saved)alert('Bază importată și salvată. Arhiva și backup-ul de siguranță au fost păstrate.');
+      save();
+      alert('Bază importată. Arhiva a fost păstrată/îmbinată.');
     }catch(e){
       console.error(e);
       alert('Fișier invalid sau format incompatibil.');
     }
   };
-  r.readAsText(f);
+  r.readAsText(f);ev.target.value='';
 }
 async function resetDb(){
   const confirmText=prompt('ATENȚIE: asta șterge toată baza din MongoDB, inclusiv arhiva. Scrie exact RESET ca să continui.');
@@ -2700,26 +2460,17 @@ async function resetDb(){
     const res=await fetch('/api/reset',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({confirm:'RESET',rev:stateRev})
+      body:JSON.stringify({confirm:'RESET'})
     });
-    if(res.status===409){reloadForConflict=true;alert('Baza a fost modificată în altă pagină. Reîncarc înainte de reset pentru siguranță.');location.reload();return}
     if(!res.ok)throw new Error(await res.text());
-    reloadForConflict=true;
-    hasUnsavedChanges=false;
-    clearTimeout(saveTimer);
     location.reload();
   }catch(e){
     console.error(e);
     alert('Nu am putut reseta baza.');
   }
 }
-function previewDb(){
-  const box=el('preview');
-  const section=el('tab-backup');
-  if(!box||section?.classList.contains('hidden'))return;
-  box.textContent=JSON.stringify(db,null,2).slice(0,9000);
-}
-function download(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+function previewDb(){el('preview').textContent=JSON.stringify(db,null,2).slice(0,9000)}
+function download(obj,name){const blob=new Blob([JSON.stringify(obj,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url)}
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!el('clientModalBackdrop')?.classList.contains('hidden'))closeClientModal()});
 const modalBackdropInit=el('clientModalBackdrop');

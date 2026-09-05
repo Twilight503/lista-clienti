@@ -1,0 +1,19 @@
+nohup: ignoring input
+[2026-07-01 14:45:16 +0300] [2307513] [INFO] Starting gunicorn 26.0.0
+[2026-07-01 14:45:16 +0300] [2307513] [INFO] Listening at: http://127.0.0.1:8001 (2307513)
+[2026-07-01 14:45:16 +0300] [2307513] [INFO] Using worker: sync
+[2026-07-01 14:45:16 +0300] [2307514] [INFO] Booting worker with pid: 2307514
+[2026-07-01 14:45:16 +0300] [2307515] [INFO] Booting worker with pid: 2307515
+[2026-07-01 14:45:16 +0300] [2307513] [INFO] Control socket listening at /run/user/0/gunicorn.ctl
+[2026-07-01 14:51:58 +0300] [2307513] [INFO] Handling signal: hup
+[2026-07-01 14:51:58 +0300] [2307513] [INFO] Hang up: Master
+[2026-07-01 14:51:58 +0300] [2307744] [INFO] Booting worker with pid: 2307744
+[2026-07-01 14:51:58 +0300] [2307513] [INFO] Control socket listening at /run/user/0/gunicorn.ctl
+[2026-07-01 14:52:00 +0300] [2307753] [INFO] Booting worker with pid: 2307753
+[2026-07-01 14:52:00 +0300] [2307513] [INFO] Control socket listening at /run/user/0/gunicorn.ctl
+[2026-07-01 14:52:00 +0300] [2307513] [WARNING] Worker (pid:2307514) was sent SIGHUP!
+[2026-07-01 14:52:00 +0300] [2307513] [WARNING] Worker (pid:2307515) was sent SIGHUP!
+[2026-07-01 20:03:01 +0300] [2307744] [INFO] Worker exiting (pid: 2307744)
+[2026-07-01 20:03:01 +0300] [2307753] [INFO] Worker exiting (pid: 2307753)
+[2026-07-01 20:03:01 +0300] [2307513] [INFO] Handling signal: term
+[2026-07-01 20:03:02 +0300] [2307513] [INFO] Shutting down: Master

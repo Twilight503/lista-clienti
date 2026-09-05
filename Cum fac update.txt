@@ -1,0 +1,16 @@
+#windows
+git clone -b main https://github.com/Twilight503/lista-clienti.git Lista-clienti-verificare
+cd Lista-clienti-verificare
+# copiezi modificările peste
+git add .
+git commit -m "update"
+git push origin main
+
+# VPS
+cd /var/www/lista-clienti
+git pull origin main
+source venv/bin/activate
+pip install -r requirements.txt
+pm2 restart lista-clienti --update-env
+pm2 logs lista-clienti --lines 50
+curl -I http://127.0.0.1:8001
